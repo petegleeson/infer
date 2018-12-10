@@ -1,0 +1,25 @@
+{
+  "name": "hm-infer",
+  "version": "1.0.0",
+  "author": "Peter Gleeson <petergleeson.dev@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "test": "./node_modules/.bin/jest"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.jsx?$": "babel-jest"
+    }
+  },
+  "devDependencies": {
+    "@babel/core": "^7.0.0-rc.1",
+    "@babel/preset-env": "^7.0.0-rc.1",
+    "@babel/preset-flow": "^7.0.0-rc.1",
+    "babel-core": "^7.0.0-0",
+    "babel-jest": "^23.4.2",
+    "flow-bin": "^0.78.0",
+    "flow-typed": "^2.5.1",
+    "jest": "^23.4.2"
+  }
+}
