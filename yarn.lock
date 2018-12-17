@@ -8,6 +8,12 @@
   dependencies:
     "@babel/highlight" "7.0.0-rc.1"
 
+"@babel/code-frame@^7.0.0":
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/@babel/code-frame/-/code-frame-7.0.0.tgz#06e2ab19bdb535385559aabb5ba59729482800f8"
+  dependencies:
+    "@babel/highlight" "^7.0.0"
+
 "@babel/core@^7.0.0-rc.1":
   version "7.0.0-rc.1"
   resolved "https://registry.yarnpkg.com/@babel/core/-/core-7.0.0-rc.1.tgz#53c84fd562e13325f123d5951184eec97b958204"
@@ -32,6 +38,16 @@
   resolved "https://registry.yarnpkg.com/@babel/generator/-/generator-7.0.0-rc.1.tgz#739c87d70b31aeed802bd6bc9fd51480065c45e8"
   dependencies:
     "@babel/types" "7.0.0-rc.1"
+    jsesc "^2.5.1"
+    lodash "^4.17.10"
+    source-map "^0.5.0"
+    trim-right "^1.0.1"
+
+"@babel/generator@^7.1.6":
+  version "7.2.0"
+  resolved "https://registry.yarnpkg.com/@babel/generator/-/generator-7.2.0.tgz#eaf3821fa0301d9d4aef88e63d4bcc19b73ba16c"
+  dependencies:
+    "@babel/types" "^7.2.0"
     jsesc "^2.5.1"
     lodash "^4.17.10"
     source-map "^0.5.0"
@@ -81,11 +97,25 @@
     "@babel/template" "7.0.0-rc.1"
     "@babel/types" "7.0.0-rc.1"
 
+"@babel/helper-function-name@^7.1.0":
+  version "7.1.0"
+  resolved "https://registry.yarnpkg.com/@babel/helper-function-name/-/helper-function-name-7.1.0.tgz#a0ceb01685f73355d4360c1247f582bfafc8ff53"
+  dependencies:
+    "@babel/helper-get-function-arity" "^7.0.0"
+    "@babel/template" "^7.1.0"
+    "@babel/types" "^7.0.0"
+
 "@babel/helper-get-function-arity@7.0.0-rc.1":
   version "7.0.0-rc.1"
   resolved "https://registry.yarnpkg.com/@babel/helper-get-function-arity/-/helper-get-function-arity-7.0.0-rc.1.tgz#60185957f72ed73766ce74c836ac574921743c46"
   dependencies:
     "@babel/types" "7.0.0-rc.1"
+
+"@babel/helper-get-function-arity@^7.0.0":
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/@babel/helper-get-function-arity/-/helper-get-function-arity-7.0.0.tgz#83572d4320e2a4657263734113c42868b64e49c3"
+  dependencies:
+    "@babel/types" "^7.0.0"
 
 "@babel/helper-hoist-variables@7.0.0-rc.1":
   version "7.0.0-rc.1"
@@ -166,6 +196,12 @@
   dependencies:
     "@babel/types" "7.0.0-rc.1"
 
+"@babel/helper-split-export-declaration@^7.0.0":
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/@babel/helper-split-export-declaration/-/helper-split-export-declaration-7.0.0.tgz#3aae285c0311c2ab095d997b8c9a94cad547d813"
+  dependencies:
+    "@babel/types" "^7.0.0"
+
 "@babel/helper-wrap-function@7.0.0-rc.1":
   version "7.0.0-rc.1"
   resolved "https://registry.yarnpkg.com/@babel/helper-wrap-function/-/helper-wrap-function-7.0.0-rc.1.tgz#168454fe350e9ead8d91cdc581597ea506e951ff"
@@ -191,9 +227,21 @@
     esutils "^2.0.2"
     js-tokens "^3.0.0"
 
+"@babel/highlight@^7.0.0":
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/@babel/highlight/-/highlight-7.0.0.tgz#f710c38c8d458e6dd9a201afb637fcb781ce99e4"
+  dependencies:
+    chalk "^2.0.0"
+    esutils "^2.0.2"
+    js-tokens "^4.0.0"
+
 "@babel/parser@7.0.0-rc.1":
   version "7.0.0-rc.1"
   resolved "https://registry.yarnpkg.com/@babel/parser/-/parser-7.0.0-rc.1.tgz#d009a9bba8175d7b971e30cd03535b278c44082d"
+
+"@babel/parser@^7.1.2", "@babel/parser@^7.1.6", "@babel/parser@^7.2.0":
+  version "7.2.0"
+  resolved "https://registry.yarnpkg.com/@babel/parser/-/parser-7.2.0.tgz#02d01dbc330b6cbf36b76ac93c50752c69027065"
 
 "@babel/plugin-proposal-async-generator-functions@7.0.0-rc.1":
   version "7.0.0-rc.1"
@@ -505,6 +553,14 @@
     "@babel/types" "7.0.0-rc.1"
     lodash "^4.17.10"
 
+"@babel/template@^7.1.0":
+  version "7.1.2"
+  resolved "https://registry.yarnpkg.com/@babel/template/-/template-7.1.2.tgz#090484a574fef5a2d2d7726a674eceda5c5b5644"
+  dependencies:
+    "@babel/code-frame" "^7.0.0"
+    "@babel/parser" "^7.1.2"
+    "@babel/types" "^7.1.2"
+
 "@babel/traverse@7.0.0-rc.1":
   version "7.0.0-rc.1"
   resolved "https://registry.yarnpkg.com/@babel/traverse/-/traverse-7.0.0-rc.1.tgz#867b4b45ada2d51ae2d0076f1c1d5880f8557158"
@@ -519,9 +575,31 @@
     globals "^11.1.0"
     lodash "^4.17.10"
 
+"@babel/traverse@^7.1.6":
+  version "7.1.6"
+  resolved "https://registry.yarnpkg.com/@babel/traverse/-/traverse-7.1.6.tgz#c8db9963ab4ce5b894222435482bd8ea854b7b5c"
+  dependencies:
+    "@babel/code-frame" "^7.0.0"
+    "@babel/generator" "^7.1.6"
+    "@babel/helper-function-name" "^7.1.0"
+    "@babel/helper-split-export-declaration" "^7.0.0"
+    "@babel/parser" "^7.1.6"
+    "@babel/types" "^7.1.6"
+    debug "^4.1.0"
+    globals "^11.1.0"
+    lodash "^4.17.10"
+
 "@babel/types@7.0.0-rc.1":
   version "7.0.0-rc.1"
   resolved "https://registry.yarnpkg.com/@babel/types/-/types-7.0.0-rc.1.tgz#6abf6d14ddd9fc022617e5b62e6b32f4fa6526ad"
+  dependencies:
+    esutils "^2.0.2"
+    lodash "^4.17.10"
+    to-fast-properties "^2.0.0"
+
+"@babel/types@^7.0.0", "@babel/types@^7.1.2", "@babel/types@^7.1.6", "@babel/types@^7.2.0":
+  version "7.2.0"
+  resolved "https://registry.yarnpkg.com/@babel/types/-/types-7.2.0.tgz#7941c5b2d8060e06f9601d6be7c223eef906d5d8"
   dependencies:
     esutils "^2.0.2"
     lodash "^4.17.10"
@@ -1245,6 +1323,12 @@ debug@^2.1.2, debug@^2.2.0, debug@^2.3.3, debug@^2.6.8, debug@^2.6.9:
   resolved "https://registry.yarnpkg.com/debug/-/debug-2.6.9.tgz#5d128515df134ff327e90a4c93f4e077a536341f"
   dependencies:
     ms "2.0.0"
+
+debug@^4.1.0:
+  version "4.1.0"
+  resolved "https://registry.yarnpkg.com/debug/-/debug-4.1.0.tgz#373687bffa678b38b1cd91f861b63850035ddc87"
+  dependencies:
+    ms "^2.1.1"
 
 decamelize@^1.0.0, decamelize@^1.1.1:
   version "1.2.0"
@@ -2516,7 +2600,7 @@ js-tokens@^3.0.0, js-tokens@^3.0.2:
   version "3.0.2"
   resolved "https://registry.yarnpkg.com/js-tokens/-/js-tokens-3.0.2.tgz#9866df395102130e38f7f996bceb65443209c25b"
 
-"js-tokens@^3.0.0 || ^4.0.0":
+"js-tokens@^3.0.0 || ^4.0.0", js-tokens@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/js-tokens/-/js-tokens-4.0.0.tgz#19203fb59991df98e3a287050d4647cdeaf32499"
 
@@ -2857,6 +2941,10 @@ mixin-deep@^1.2.0:
 ms@2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/ms/-/ms-2.0.0.tgz#5608aeadfc00be6c2901df5f9861788de0d597c8"
+
+ms@^2.1.1:
+  version "2.1.1"
+  resolved "https://registry.yarnpkg.com/ms/-/ms-2.1.1.tgz#30a5864eb3ebb0a66f2ebe6d727af06a09d86e0a"
 
 nan@^2.9.2:
   version "2.10.0"
