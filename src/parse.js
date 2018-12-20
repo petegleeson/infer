@@ -1,36 +1,51 @@
 // @flow
 import traverse from "@babel/traverse";
 import Graph from "./graph";
-import { existsTypeAnnotation } from "@babel/types";
 
-const returnType = node => ({ kind: "Return", node });
-const openType = node => ({ kind: "Open", node });
-const intType = node => ({ kind: "Int", node });
-const funcType = node => ({ kind: "Func", node });
-const binaryExpressionType = node => ({
-  kind: "Expression",
-  node
-});
+type Kind = "open" | "int" | "string";
 
-let id = 0;
-const getId = loc =>
-  `${loc.start.line}${loc.start.column}${loc.end.line}${loc.end.column}`;
+export const ERROR = Symbol("CONSTRAINT_ERROR");
+type ConstraintError = typeof ERROR;
+type Constraint = Kind => Kind | ConstraintError;
+
+type Node = Object;
+
+type Vertex = {
+  constraints: { node: Node, fn: Constraint }[],
+  kind: Kind,
+  node: Node
+};
+
+// const returnType = node => ({ kind: "Return", node });
+// const openType = node => ({ kind: "Open", node });
+// const intType = node => ({ kind: "Int", node });
+// const funcType = node => ({ kind: "Func", node });
+// const binaryExpressionType = node => ({
+//   kind: "Expression",
+//   node
+// });
 
 export const collector = ast => {
   const graph = new Graph();
   traverse(ast, {
-    FunctionDeclaration: {
-      enter(path) {
-        const type = funcType(path.node);
-        graph.addNode(type);
-        path.data.type = type;
-      }
-    },
     BinaryExpression: {
       exit(path) {
         const { left, right } = path.node;
-        const type = binaryExpressionType(path.node);
-        graph.addNode(type);
+        const type: Vertex = {
+          node: path.node,
+          kind: "int",
+          constraints: [
+            {
+              node: graph.findNode(left),
+              fn: type => (type === "open" || type === "int" ? "int" : ERROR)
+            },
+            {
+              node: graph.findNode(right),
+              fn: type => (type === "open" || type === "int" ? "int" : ERROR)
+            }
+          ]
+        };
+        graph.addVertex(type);
 
         graph.addLine(type.node, type.node.left);
         graph.addLine(type.node, type.node.right);
@@ -39,8 +54,12 @@ export const collector = ast => {
     },
     Identifier: {
       exit(path) {
-        const type = openType(path.node);
-        graph.addNode(type);
+        const type: Vertex = {
+          node: path.node,
+          kind: "open",
+          constraints: []
+        };
+        graph.addVertex(type);
         path.data.type = type;
 
         const binding = path.scope.bindings[type.node.name];
@@ -51,23 +70,48 @@ export const collector = ast => {
     },
     NumericLiteral: {
       exit(path) {
-        const type = intType(path.node);
-        graph.addNode(type);
+        const type: Vertex = {
+          node: path.node,
+          kind: "int",
+          constraints: []
+        };
+        graph.addVertex(type);
         path.data.type = type;
       }
     },
-    ReturnStatement: {
+    StringLiteral: {
       exit(path) {
-        const type = returnType(path.node);
-        graph.addNode(type);
+        const type: Vertex = {
+          node: path.node,
+          kind: "string",
+          constraints: []
+        };
+        graph.addVertex(type);
         path.data.type = type;
-
-        graph.addLine(type.node.argument, type.node);
-        graph.addLine(type.node, path.getFunctionParent().node);
       }
     }
   });
   return graph;
+};
+
+// follow all constraints and return the errors
+export const resolver = graph => {
+  const follow = vertex => {
+    if (vertex.value.constraints.length === 0) {
+      return vertex.value.kind;
+    }
+
+    const fns = vertex.value.constraints.reduce(
+      (a, c) => [...a, () => c.fn(follow(c.node))],
+      []
+    );
+    return fns.map(fn => fn());
+  };
+
+  return graph.vertices
+    .filter(({ value }) => value.constraints.length > 0)
+    .reduce((a, c) => [...a, ...follow(c)], [])
+    .filter(type => type === ERROR);
 };
 
 export const getType = (graph, entry) => {

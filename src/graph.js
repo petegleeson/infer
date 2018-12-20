@@ -1,3 +1,26 @@
+// @flow
+
+// type Vertex<T> = {
+//   value: T
+// };
+
+// type Edge<T> = {
+//   to: Vertex<T>,
+//   from: Vertex<T>
+// };
+
+// type Graph<T> = {
+//   vertices: Vertex<T>[],
+//   edges: Edge<T>[]
+// };
+
+// const graph = <T>(): Graph<T> => ({ vertices: [], edges: [] });
+
+// type AddVertex = <T>(Graph<T>, Vertex<T>) => Graph<T>;
+// const addVertex: AddVertex = (edge, vertex) => ({  })
+
+// type addEdge = <T>(Graph<T>, Edge<T>) => Graph<T>;
+
 export default class Graph {
   /**
    * We'll hold onto all of our nodes in a regular JavaScript array. Not
@@ -6,7 +29,7 @@ export default class Graph {
    */
 
   constructor() {
-    this.nodes = [];
+    this.vertices = [];
   }
 
   /**
@@ -14,8 +37,8 @@ export default class Graph {
    * lines.
    */
 
-  addNode(value) {
-    return this.nodes.push({
+  addVertex(value) {
+    return this.vertices.push({
       value,
       lines: []
     });
@@ -31,37 +54,32 @@ export default class Graph {
    * now.
    */
 
-  find(value) {
-    return this.nodes.find(node => {
-      return node.value === value;
-    });
-  }
-
-  findIdentifer(identifier) {
-    return this.nodes.find(
-      node => node.value.node && node.value.node.name === identifier.name
-    );
+  find(fn) {
+    return this.vertices.find(fn);
   }
 
   findNode(node) {
-    return this.nodes.find(n => n.value.node === node);
+    return this.find(v => v.value.node === node);
   }
 
   /**
    * Next we can connect two nodes by making a "line" from one to the other.
    */
 
-  addLine(startValue, endValue) {
+  addLine(startNode, endNode) {
     // Find the nodes for each value.
-    let startNode = this.findNode(startValue);
-    let endNode = this.findNode(endValue);
+    let startVertex = this.findNode(startNode);
+    let endVertex = this.findNode(endNode);
 
     // Freak out if we didn't find one or the other.
-    if (!startNode || !endNode) {
-      throw new Error("Both nodes need to exist");
+    if (!startVertex) {
+      throw new Error("Start vertex not found");
+    }
+    if (!endVertex) {
+      throw new Error("End vertex not found");
     }
 
     // And add a reference to the endNode from the startNode.
-    startNode.lines.push(endNode);
+    startVertex.lines.push(endVertex);
   }
 }
