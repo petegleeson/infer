@@ -21,6 +21,8 @@
 
 // type addEdge = <T>(Graph<T>, Edge<T>) => Graph<T>;
 
+export const map = (graph, fn) => new Graph(graph.vertices.map(fn));
+
 export default class Graph {
   /**
    * We'll hold onto all of our nodes in a regular JavaScript array. Not
@@ -28,8 +30,8 @@ export default class Graph {
    * way to store references to everything.
    */
 
-  constructor() {
-    this.vertices = [];
+  constructor(vertices = []) {
+    this.vertices = vertices;
   }
 
   /**

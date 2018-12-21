@@ -1,6 +1,6 @@
 // @flow
 import traverse from "@babel/traverse";
-import Graph from "./graph";
+import Graph, { map } from "./graph";
 
 type Kind = "open" | "int" | "string";
 
@@ -34,17 +34,17 @@ export const collector = ast => {
         const type: Vertex = {
           node: path.node,
           kind: "int",
-          constraints: [
-            {
-              node: graph.findNode(left),
-              fn: type => (type === "open" || type === "int" ? "int" : ERROR)
-            },
-            {
-              node: graph.findNode(right),
-              fn: type => (type === "open" || type === "int" ? "int" : ERROR)
-            }
-          ]
+          constraints: []
         };
+
+        graph.findNode(left).value.constraints.push({
+          node: path.node,
+          fn: type => (type === "open" || type === "int" ? "int" : ERROR)
+        });
+        graph.findNode(right).value.constraints.push({
+          node: path.node,
+          fn: type => (type === "open" || type === "int" ? "int" : ERROR)
+        });
         graph.addVertex(type);
 
         graph.addLine(type.node, type.node.left);
@@ -94,51 +94,12 @@ export const collector = ast => {
   return graph;
 };
 
-// follow all constraints and return the errors
 export const resolver = graph => {
-  const follow = vertex => {
-    if (vertex.value.constraints.length === 0) {
-      return vertex.value.kind;
+  return map(graph, v => ({
+    ...v,
+    value: {
+      ...v.value,
+      kind: v.value.constraints.reduce((a, c) => c.fn(a), v.value.kind)
     }
-
-    const fns = vertex.value.constraints.reduce(
-      (a, c) => [...a, () => c.fn(follow(c.node))],
-      []
-    );
-    return fns.map(fn => fn());
-  };
-
-  return graph.vertices
-    .filter(({ value }) => value.constraints.length > 0)
-    .reduce((a, c) => [...a, ...follow(c)], [])
-    .filter(type => type === ERROR);
-};
-
-export const getType = (graph, entry) => {
-  switch (entry.value.kind) {
-    case "Func": {
-      const ret = graph.nodes.find(
-        n => n.value.kind === "Return" && n.lines.includes(entry)
-      );
-      return `(${entry.value.node.params
-        .map(param => getType(graph, graph.findNode(param)))
-        .join(", ")}) => ${ret ? getType(graph, ret) : "void"}`;
-    }
-    case "Return": {
-      return getType(graph, graph.findNode(entry.value.node.argument));
-    }
-    case "Expression": {
-      return "Int";
-    }
-    case "Open": {
-      const upper = graph.nodes.find(n => n.lines.includes(entry));
-
-      return upper ? getType(graph, upper) : "Open";
-    }
-    case "Int": {
-      return "Int";
-    }
-    default:
-      return "";
-  }
+  }));
 };
