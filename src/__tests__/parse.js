@@ -1,7 +1,7 @@
 // @flow
 import * as parser from "@babel/parser";
 import { map } from "../graph";
-import { collector, resolver, getType, ERROR, infer } from "../parse";
+import { collector, resolver, ERROR, int, func } from "../parse";
 
 it("should infer type of nodes", () => {
   const code = `n + 1;`;
@@ -12,9 +12,9 @@ it("should infer type of nodes", () => {
     [value.node.type]: value.kind
   }));
   expect(types).toEqual([
-    { Identifier: "int" },
-    { NumericLiteral: "int" },
-    { BinaryExpression: "int" }
+    { Identifier: int() },
+    { NumericLiteral: int() },
+    { BinaryExpression: int() }
   ]);
 });
 
@@ -28,7 +28,25 @@ it("should error on binary expression", () => {
   }));
   expect(types).toEqual([
     { StringLiteral: ERROR },
-    { NumericLiteral: "int" },
-    { BinaryExpression: "int" }
+    { NumericLiteral: int() },
+    { BinaryExpression: int() }
   ]);
+});
+
+it("should infer function type", () => {
+  const code = `function add(n) {
+    return n + 1;
+  }`;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const inferred = resolver(graph);
+  const types = inferred.vertices.map(({ value }) => ({
+    [value.node.type]: value.kind
+  }));
+  console.log(
+    inferred.vertices
+      .filter(({ value }) => value.node.type === "Identifier")
+      .map(({ value }) => ({ kind: value.kind, name: value.node.name }))
+  );
+  expect(types).toContain([{ FunctionDeclaration: func([int()], int()) }]);
 });
