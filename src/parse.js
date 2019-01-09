@@ -1,6 +1,5 @@
 // @flow
 import traverse from "@babel/traverse";
-import Graph, { map } from "./graph";
 
 type OpenKind = { type: "open" };
 export const open = (): OpenKind => ({ type: "open" });
@@ -30,10 +29,47 @@ type Constraint = Kind => Kind | ConstraintError;
 type Node = Object;
 
 type Vertex = {
-  constraints: { node: Node, fn: Constraint }[],
   kind: Kind,
   node: Node
 };
+
+type Edge = {
+  from: Vertex,
+  to: Vertex,
+  constraint: Constraint
+};
+
+type Graph = {
+  vertices: Vertex[],
+  edges: Edge[]
+};
+
+const findVertex = (graph: Graph, node) =>
+  graph.vertices.find(vertex => vertex.node === node);
+
+const addVertex = (graph: Graph, node) => {
+  return {
+    ...graph,
+    vertices: [...graph.vertices, node]
+  };
+};
+
+const addEdge = (graph, { from, to, constraint }) => {
+  return {
+    ...graph,
+    edges: [...graph.edges, { from, to, constraint }]
+  };
+};
+
+const createGraph = () => ({
+  vertices: [],
+  edges: []
+});
+
+const map = (graph, fn) => ({
+  vertices: graph.vertices.map(fn),
+  edges: graph.edges
+});
 
 const compose = (...fns) =>
   fns.reduce((g, f) => (...args) => f(g(...args)), x => x);
@@ -48,116 +84,111 @@ const compose = (...fns) =>
 // });
 
 export const collector = ast => {
-  const graph = new Graph();
+  let graph = createGraph();
   traverse(ast, {
     BinaryExpression: {
       exit(path) {
         const { left, right } = path.node;
-        const type: Vertex = {
+        const me: Vertex = {
           node: path.node,
-          kind: int(),
-          constraints: []
+          kind: int()
         };
+        path.data.type = me;
+        graph = addVertex(graph, me);
 
-        graph.findNode(left).value.constraints.push({
-          node: path.node,
-          fn: kind =>
+        graph = addEdge(graph, {
+          from: me,
+          to: findVertex(graph, left),
+          constraint: kind =>
             kind.type === "open" || kind.type === "int" ? int() : ERROR
         });
-        graph.findNode(right).value.constraints.push({
-          node: path.node,
-          fn: kind =>
+
+        graph = addEdge(graph, {
+          from: me,
+          to: findVertex(graph, right),
+          constraint: kind =>
             kind.type === "open" || kind.type === "int" ? int() : ERROR
         });
-        graph.addVertex(type);
-
-        graph.addLine(type.node, type.node.left);
-        graph.addLine(type.node, type.node.right);
-        path.data.type = type;
       }
     },
     Identifier: {
       exit(path) {
-        const type: Vertex = {
+        const me: Vertex = {
           node: path.node,
-          kind: open(),
-          constraints: []
+          kind: open()
         };
-        graph.addVertex(type);
-        path.data.type = type;
+        path.data.type = me;
 
-        const binding = path.scope.bindings[type.node.name];
-        if (binding && binding.identifier !== type.node) {
-          const node = graph.findNode(binding.identifier);
-          node.value.constraints.push({
-            node: path.node,
-            fn: kind => kind
+        graph = addVertex(graph, me);
+
+        const binding = path.scope.bindings[me.node.name];
+        if (binding && binding.identifier !== me.node) {
+          graph = addEdge(graph, {
+            from: me,
+            to: findVertex(graph, binding.identifier),
+            constraint: kind => kind
           });
-          graph.addLine(type.node, binding.identifier);
         }
       }
     },
     FunctionDeclaration: {
       enter(path) {
         const { id, params } = path.node;
-        const functionV: Vertex = {
+        const me: Vertex = {
           node: path.node,
-          kind: func(params.map(open)),
-          constraints: []
+          kind: func(params.map(open))
         };
-        graph.addVertex(functionV);
+
+        graph = addVertex(graph, me);
       },
       exit(path) {
         if (path.node.id) {
-          const id = graph.findNode(path.node.id);
-          id.value.constraints.push({
-            node: path.node,
-            fn: kind => {
+          const me = findVertex(graph, path.node);
+          const id = findVertex(graph, path.node.id);
+          graph = addEdge(graph, {
+            from: me,
+            to: id,
+            constraint: kind => {
               console.log("identifer constraining kind", kind);
-              return kind === "open"
-                ? graph.findNode(path.node).value.kind
-                : ERROR;
+              return kind === "open" ? me.kind : ERROR;
             }
           });
-          path.node.params.forEach(p => {
-            const param = graph.findNode(p);
-            p.value.constraints.push({
-              node: path.node,
-              fn: kind => {
-                console.log("identifer constraining kind", kind);
-                return kind === "open"
-                  ? graph.findNode(path.node).value.kind
-                  : ERROR;
-              }
-            });
-          });
-          // console.log("func", graph.findNode(path.node.id).value.constraints);
         }
       }
     },
     NumericLiteral: {
       exit(path) {
-        const type: Vertex = {
+        const me: Vertex = {
           node: path.node,
-          kind: int(),
-          constraints: []
+          kind: int()
         };
-        graph.addVertex(type);
-        path.data.type = type;
+        path.data.type = me;
+
+        graph = addVertex(graph, me);
       }
     },
     ReturnStatement: {
       exit(path) {
-        const parentFunction = graph.findNode(path.getFunctionParent().node);
-        const arg = graph.findNode(path.node.argument);
-        parentFunction.value.constraints.push({
-          node: path.node.argument,
-          fn: kind => {
-            console.log("return constraining kind", kind);
-            return kind;
-          }
-          // fn: ({ type, params, returns }) =>
-          //   returns.type === "open" ? func(params, arg.value.kind) : ERROR
+        const me: Vertex = {
+          node: path.node,
+          kind: open()
+        };
+        path.data.type = me;
+
+        graph = addVertex(graph, me);
+
+        const parentFunction = findVertex(graph, path.getFunctionParent().node);
+        graph = addEdge(graph, {
+          from: me,
+          to: parentFunction,
+          constraint: kind => kind
+        });
+
+        const arg = findVertex(graph, path.node.argument);
+        graph = addEdge(graph, {
+          from: arg,
+          to: me,
+          constraint: kind => kind
         });
       }
     },
@@ -165,8 +196,7 @@ export const collector = ast => {
       exit(path) {
         const type: Vertex = {
           node: path.node,
-          kind: string(),
-          constraints: []
+          kind: string()
         };
         graph.addVertex(type);
         path.data.type = type;
@@ -177,27 +207,32 @@ export const collector = ast => {
 };
 
 export const resolver = graph => {
-  const constraints = vertex => {
-    return vertex.value.constraints.reduce((a, c) => {
-      console.log("node", vertex.value.node, "\nconstraint", c.fn);
-      return [...constraints(graph.findNode(c.node)), c.fn, ...a];
-    }, []);
+  // const constraints = vertex => {
+  //   return vertex.value.constraints.reduce((a, c) => {
+  //     console.log("node", vertex.value.node, "\nconstraint", c.fn);
+  //     return [...constraints(graph.findNode(c.node)), c.fn, ...a];
+  //   }, []);
+  // };
+
+  // const n = graph.vertices.find(
+  //   v => v.value.node.type === "Identifier" && v.value.node.name === "add"
+  // );
+  // console.log("inferring", n.value);
+
+  const constrain = vertex => {
+    // TODO: extend this to multiple incoming constraints
+    const edge = graph.edges.find(({ to }) => to === vertex);
+    console.log("vertex", vertex);
+    console.log("edge", edge);
+    if (!edge) {
+      return vertex;
+    }
+    const { from, to, constraint } = edge;
+    return {
+      ...vertex,
+      kind: constraint(constrain(findVertex(graph, from)))
+    };
   };
 
-  const n = graph.vertices.find(
-    v => v.value.node.type === "Identifier" && v.value.node.name === "add"
-  );
-  console.log("inferring", n.value);
-
-  const constrain = compose(...constraints(n));
-  // console.log(constrain(n.value.kind));
-  // constraints(n).forEach(n => console.log(n.toString()));
-
-  return map(graph, v => ({
-    ...v,
-    value: {
-      ...v.value,
-      kind: compose(...constraints(v))(v.value.kind)
-    }
-  }));
+  return map(graph, constrain);
 };

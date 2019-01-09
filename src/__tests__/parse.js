@@ -61,18 +61,10 @@ it("should infer function type", () => {
   }`;
   const ast = parser.parse(code);
   const graph = collector(ast);
+  console.log("graph", graph.edges);
   const inferred = resolver(graph);
-  const types = inferred.vertices.map(({ value }) => ({
-    [value.node.type]: value.kind
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
   }));
-  console.log(
-    inferred.vertices
-      .filter(
-        ({ value }) =>
-          value.node.type === "Identifier" ||
-          value.node.type === "FunctionDeclaration"
-      )
-      .map(({ value }) => ({ kind: value.kind, name: value.node.name }))
-  );
   expect(types).toContain([{ FunctionDeclaration: func([int()], int()) }]);
 });
