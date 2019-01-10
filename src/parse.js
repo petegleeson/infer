@@ -92,6 +92,41 @@ const map = (graph, fn) => ({
 export const collector = ast => {
   let graph = createGraph();
   traverse(ast, {
+    ArrowFunctionExpression: {
+      enter(path) {
+        const { id, params } = path.node;
+        const me: Vertex = {
+          node: path.node,
+          kind: func(params.map(open))
+        };
+
+        graph = addVertex(graph, me);
+      },
+      exit(path) {
+        const me = findVertex(graph, path.node);
+        if (path.node.body.type !== "BlockExpression") {
+          const body = findVertex(graph, path.node.body);
+          graph = addEdge(graph, {
+            from: body,
+            to: me,
+            constraint: (from, to) => func(to.params, from)
+          });
+        }
+        graph = me.node.params
+          .map((param, i) => ({
+            from: findVertex(graph, param),
+            to: me,
+            constraint: (from, to) => {
+              const { params, returns } = to;
+              return func(
+                [...params.slice(0, i), from, ...params.slice(i + 1)],
+                returns
+              );
+            }
+          }))
+          .reduce((g, edge) => addEdge(g, edge), graph);
+      }
+    },
     BinaryExpression: {
       exit(path) {
         const { left, right } = path.node;
@@ -148,28 +183,28 @@ export const collector = ast => {
         graph = addVertex(graph, me);
       },
       exit(path) {
+        const me = findVertex(graph, path.node);
         if (path.node.id) {
-          const me = findVertex(graph, path.node);
           const id = findVertex(graph, path.node.id);
           graph = addEdge(graph, {
             from: me,
             to: id,
             constraint: from => from
           });
-          graph = me.node.params
-            .map((param, i) => ({
-              from: findVertex(graph, param),
-              to: me,
-              constraint: (from, to) => {
-                const { params, returns } = to;
-                return func(
-                  [...params.slice(0, i), from, ...params.slice(i + 1)],
-                  returns
-                );
-              }
-            }))
-            .reduce((g, edge) => addEdge(g, edge), graph);
         }
+        graph = me.node.params
+          .map((param, i) => ({
+            from: findVertex(graph, param),
+            to: me,
+            constraint: (from, to) => {
+              const { params, returns } = to;
+              return func(
+                [...params.slice(0, i), from, ...params.slice(i + 1)],
+                returns
+              );
+            }
+          }))
+          .reduce((g, edge) => addEdge(g, edge), graph);
       }
     },
     NumericLiteral: {
@@ -220,6 +255,16 @@ export const collector = ast => {
         path.data.type = me;
 
         graph = addVertex(graph, me);
+      }
+    },
+    VariableDeclarator: {
+      exit(path) {
+        const { id, init } = path.node;
+        graph = addEdge(graph, {
+          from: findVertex(graph, init),
+          to: findVertex(graph, id),
+          constraint: from => from
+        });
       }
     }
   });

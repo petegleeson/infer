@@ -2,7 +2,7 @@
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
 import { map } from "../graph";
-import { collector, resolver, ERROR, int, func, open } from "../parse";
+import { collector, resolver, ERROR, int, func, open, string } from "../parse";
 
 it("should infer type of nodes", () => {
   const code = `n + 1;`;
@@ -49,4 +49,16 @@ it("should infer function type", () => {
   expect(types).toEqual(
     containDeep([{ FunctionDeclaration: func([int()], int()) }])
   );
+});
+
+it("should infer arrow function type", () => {
+  const code = `const f = () => "hello"`;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  console.log("graph", graph);
+  const inferred = resolver(graph);
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
+  }));
+  expect(types).toEqual(containDeep([{ Identifier: func([], string()) }]));
 });
