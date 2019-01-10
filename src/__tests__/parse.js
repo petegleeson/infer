@@ -1,5 +1,6 @@
 // @flow
 import * as parser from "@babel/parser";
+import containDeep from "jest-expect-contain-deep";
 import { map } from "../graph";
 import { collector, resolver, ERROR, int, func, open } from "../parse";
 
@@ -8,29 +9,16 @@ it("should infer type of nodes", () => {
   const ast = parser.parse(code);
   const graph = collector(ast);
   const inferred = resolver(graph);
-  const types = inferred.vertices.map(({ value }) => ({
-    [value.node.type]: value.kind
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
   }));
-  expect(types).toEqual([
-    { Identifier: int() },
-    { NumericLiteral: int() },
-    { BinaryExpression: int() }
-  ]);
-});
-
-it("should error on binary expression", () => {
-  const code = `'hello' + 1;`;
-  const ast = parser.parse(code);
-  const graph = collector(ast);
-  const inferred = resolver(graph);
-  const types = inferred.vertices.map(({ value }) => ({
-    [value.node.type]: value.kind
-  }));
-  expect(types).toEqual([
-    { StringLiteral: ERROR },
-    { NumericLiteral: int() },
-    { BinaryExpression: int() }
-  ]);
+  expect(types).toEqual(
+    containDeep([
+      { Identifier: int() },
+      { NumericLiteral: int() },
+      { BinaryExpression: int() }
+    ])
+  );
 });
 
 it("should infer open function type", () => {
@@ -40,19 +28,12 @@ it("should infer open function type", () => {
   const ast = parser.parse(code);
   const graph = collector(ast);
   const inferred = resolver(graph);
-  const types = inferred.vertices.map(({ value }) => ({
-    [value.node.type]: value.kind
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
   }));
-  console.log(
-    inferred.vertices
-      .filter(
-        ({ value }) =>
-          value.node.type === "Identifier" ||
-          value.node.type === "FunctionDeclaration"
-      )
-      .map(({ value }) => ({ kind: value.kind, name: value.node.name }))
+  expect(types).toEqual(
+    containDeep([{ FunctionDeclaration: func([open()], open()) }])
   );
-  expect(types).toContain([{ FunctionDeclaration: func([open()], open()) }]);
 });
 
 it("should infer function type", () => {
@@ -61,10 +42,11 @@ it("should infer function type", () => {
   }`;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  console.log("graph", graph.edges);
   const inferred = resolver(graph);
   const types = inferred.vertices.map(({ node, kind }) => ({
     [node.type]: kind
   }));
-  expect(types).toContain([{ FunctionDeclaration: func([int()], int()) }]);
+  expect(types).toEqual(
+    containDeep([{ FunctionDeclaration: func([int()], int()) }])
+  );
 });

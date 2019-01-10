@@ -24,7 +24,7 @@ type Kind = OpenKind | IntKind | StringKind | FuncKind;
 
 export const ERROR = Symbol("CONSTRAINT_ERROR");
 type ConstraintError = typeof ERROR;
-type Constraint = Kind => Kind | ConstraintError;
+type Constraint = (from: Kind, to: Kind) => Kind | ConstraintError;
 
 type Node = Object;
 
@@ -60,7 +60,19 @@ const addVertex = (graph: Graph, node) => {
   };
 };
 
-const addEdge = (graph, { from, to, constraint }) => {
+const replaceVertex = (graph: Graph, a: Vertex, b: Vertex) => {
+  const pos = graph.vertices.indexOf(a);
+  return {
+    ...graph,
+    vertices: [
+      ...graph.vertices.slice(0, pos),
+      b,
+      ...graph.vertices.slice(pos + 1)
+    ]
+  };
+};
+
+const addEdge = (graph: Graph, { from, to, constraint }: Edge) => {
   return {
     ...graph,
     edges: [...graph.edges, { from, to, constraint }]
@@ -105,15 +117,15 @@ export const collector = ast => {
         graph = addEdge(graph, {
           from: me,
           to: findVertex(graph, left),
-          constraint: kind =>
-            kind.type === "open" || kind.type === "int" ? int() : ERROR
+          constraint: (from, to) =>
+            to.type === "open" || to.type === "int" ? int() : ERROR
         });
 
         graph = addEdge(graph, {
           from: me,
           to: findVertex(graph, right),
-          constraint: kind =>
-            kind.type === "open" || kind.type === "int" ? int() : ERROR
+          constraint: (from, to) =>
+            to.type === "open" || to.type === "int" ? int() : ERROR
         });
       }
     },
@@ -132,7 +144,7 @@ export const collector = ast => {
           graph = addEdge(graph, {
             from: me,
             to: findVertex(graph, binding.identifier),
-            constraint: kind => kind
+            constraint: from => from
           });
         }
       }
@@ -154,16 +166,16 @@ export const collector = ast => {
           graph = addEdge(graph, {
             from: me,
             to: id,
-            constraint: kind => kind
+            constraint: from => from
           });
           graph = me.node.params
             .map((param, i) => ({
               from: findVertex(graph, param),
               to: me,
-              constraint: kind => {
-                const { params, returns } = me.kind;
+              constraint: (from, to) => {
+                const { params, returns } = to;
                 return func(
-                  [...params.slice(0, i), kind, ...params.slice(i + 1)],
+                  [...params.slice(0, i), from, ...params.slice(i + 1)],
                   returns
                 );
               }
@@ -197,9 +209,9 @@ export const collector = ast => {
         graph = addEdge(graph, {
           from: me,
           to: parentFunction,
-          constraint: kind => {
-            const { params } = parentFunction.kind;
-            return func(params, kind);
+          constraint: (from, to) => {
+            const { params } = to;
+            return func(params, from);
           }
         });
 
@@ -207,7 +219,7 @@ export const collector = ast => {
         graph = addEdge(graph, {
           from: arg,
           to: me,
-          constraint: kind => kind
+          constraint: from => from
         });
       }
     },
@@ -225,52 +237,23 @@ export const collector = ast => {
   return graph;
 };
 
+const constrain = (graph: Graph, vertex: Vertex): Vertex => {
+  const edges = graph.edges.filter(({ to }) => to === vertex);
+  if (edges.length === 0) {
+    return vertex;
+  }
+  // infer vertex type
+  const kind = edges.reduce(
+    (k, edge) => edge.constraint(constrain(graph, edge.from).kind, k),
+    vertex.kind
+  );
+  // update vertex in graph
+  return { ...vertex, kind };
+};
+
 export const resolver = (graph: Graph) => {
-  // const constraints = vertex => {
-  //   return vertex.value.constraints.reduce((a, c) => {
-  //     console.log("node", vertex.value.node, "\nconstraint", c.fn);
-  //     return [...constraints(graph.findNode(c.node)), c.fn, ...a];
-  //   }, []);
-  // };
-
-  // const n = graph.vertices.find(
-  //   v => v.value.node.type === "Identifier" && v.value.node.name === "add"
-  // );
-  // console.log("inferring", n.value);
-
-  const constrain = vertex => {
-    const edges = graph.edges.filter(({ to }) => to === vertex);
-    if (edges.length === 0) {
-      return vertex;
-    }
-    // const { from, to, constraint } = edge;
-    const constraints = edges.map(({ constraint }) => constraint);
-
-    let kind = vertex.kind;
-    constraints.forEach(constraint => {
-      console.log("constraint", constraint);
-      kind = constraint(kind);
-    });
-    // const result = edges.reduce(
-    //   (kind, { from, to, constraint }) =>
-    //     constraint(constrain(findVertex(graph, from.node))).kind,
-    //   first.constraint(constrain(findVertex(graph, first.from.node))).kind
-    // );
-    // console.log("edges count", edges.length);
-    // const result = rest.reduce((kind, edge) => {
-    //   const newKind = edge.constraint(
-    //     kind
-    //     // constrain(findVertex(graph, edge.from.node)).kind
-    //   );
-    //   console.log("kind", kind);
-    //   console.log("new kind", newKind);
-    //   return kind;
-    // }, first.constraint(constrain(findVertex(graph, first.from.node)).kind));
-    return {
-      ...vertex,
-      kind
-    };
-  };
-
-  return map(graph, constrain);
+  return graph.vertices.reduce(
+    (g, vertex) => replaceVertex(g, vertex, constrain(g, vertex)),
+    graph
+  );
 };
