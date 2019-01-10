@@ -89,18 +89,6 @@ const map = (graph, fn) => ({
   edges: graph.edges
 });
 
-const compose = (...fns) =>
-  fns.reduce((g, f) => (...args) => f(g(...args)), x => x);
-
-// const returnType = node => ({ kind: "Return", node });
-// const openType = node => ({ kind: "Open", node });
-// const intType = node => ({ kind: "Int", node });
-// const funcType = node => ({ kind: "Func", node });
-// const binaryExpressionType = node => ({
-//   kind: "Expression",
-//   node
-// });
-
 export const collector = ast => {
   let graph = createGraph();
   traverse(ast, {
@@ -225,12 +213,13 @@ export const collector = ast => {
     },
     StringLiteral: {
       exit(path) {
-        const type: Vertex = {
+        const me: Vertex = {
           node: path.node,
           kind: string()
         };
-        graph.addVertex(type);
-        path.data.type = type;
+        path.data.type = me;
+
+        graph = addVertex(graph, me);
       }
     }
   });
