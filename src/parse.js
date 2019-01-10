@@ -44,8 +44,14 @@ type Graph = {
   edges: Edge[]
 };
 
-const findVertex = (graph: Graph, node) =>
-  graph.vertices.find(vertex => vertex.node === node);
+const findVertex = (graph: Graph, node) => {
+  const res = graph.vertices.find(vertex => vertex.node === node);
+  if (!res) {
+    console.log(node);
+    throw Error("can't find node");
+  }
+  return res;
+};
 
 const addVertex = (graph: Graph, node) => {
   return {
@@ -148,11 +154,21 @@ export const collector = ast => {
           graph = addEdge(graph, {
             from: me,
             to: id,
-            constraint: kind => {
-              console.log("identifer constraining kind", kind);
-              return kind === "open" ? me.kind : ERROR;
-            }
+            constraint: kind => kind
           });
+          graph = me.node.params
+            .map((param, i) => ({
+              from: findVertex(graph, param),
+              to: me,
+              constraint: kind => {
+                const { params, returns } = me.kind;
+                return func(
+                  [...params.slice(0, i), kind, ...params.slice(i + 1)],
+                  returns
+                );
+              }
+            }))
+            .reduce((g, edge) => addEdge(g, edge), graph);
         }
       }
     },
@@ -181,7 +197,10 @@ export const collector = ast => {
         graph = addEdge(graph, {
           from: me,
           to: parentFunction,
-          constraint: kind => kind
+          constraint: kind => {
+            const { params } = parentFunction.kind;
+            return func(params, kind);
+          }
         });
 
         const arg = findVertex(graph, path.node.argument);
@@ -206,7 +225,7 @@ export const collector = ast => {
   return graph;
 };
 
-export const resolver = graph => {
+export const resolver = (graph: Graph) => {
   // const constraints = vertex => {
   //   return vertex.value.constraints.reduce((a, c) => {
   //     console.log("node", vertex.value.node, "\nconstraint", c.fn);
@@ -220,17 +239,36 @@ export const resolver = graph => {
   // console.log("inferring", n.value);
 
   const constrain = vertex => {
-    // TODO: extend this to multiple incoming constraints
-    const edge = graph.edges.find(({ to }) => to === vertex);
-    console.log("vertex", vertex);
-    console.log("edge", edge);
-    if (!edge) {
+    const edges = graph.edges.filter(({ to }) => to === vertex);
+    if (edges.length === 0) {
       return vertex;
     }
-    const { from, to, constraint } = edge;
+    // const { from, to, constraint } = edge;
+    const constraints = edges.map(({ constraint }) => constraint);
+
+    let kind = vertex.kind;
+    constraints.forEach(constraint => {
+      console.log("constraint", constraint);
+      kind = constraint(kind);
+    });
+    // const result = edges.reduce(
+    //   (kind, { from, to, constraint }) =>
+    //     constraint(constrain(findVertex(graph, from.node))).kind,
+    //   first.constraint(constrain(findVertex(graph, first.from.node))).kind
+    // );
+    // console.log("edges count", edges.length);
+    // const result = rest.reduce((kind, edge) => {
+    //   const newKind = edge.constraint(
+    //     kind
+    //     // constrain(findVertex(graph, edge.from.node)).kind
+    //   );
+    //   console.log("kind", kind);
+    //   console.log("new kind", newKind);
+    //   return kind;
+    // }, first.constraint(constrain(findVertex(graph, first.from.node)).kind));
     return {
       ...vertex,
-      kind: constraint(constrain(findVertex(graph, from)))
+      kind
     };
   };
 
