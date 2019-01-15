@@ -20,6 +20,16 @@ export const func = (
   returns
 });
 
+// type CallKind = { type: "call", params: Kind[], returns: Kind };
+// export const call = (
+//   params: Kind[] = [],
+//   returns: Kind = open()
+// ): CallKind => ({
+//   type: "call",
+//   params,
+//   returns
+// });
+
 type Kind = OpenKind | IntKind | StringKind | FuncKind;
 
 export const ERROR = Symbol("CONSTRAINT_ERROR");
@@ -77,6 +87,10 @@ const addEdge = (graph: Graph, { from, to, constraint }: Edge) => {
     ...graph,
     edges: [...graph.edges, { from, to, constraint }]
   };
+};
+
+const filterEdges = (graph: Graph, fn) => {
+  return graph.edges.filter(fn);
 };
 
 const createGraph = () => ({
@@ -152,6 +166,47 @@ export const collector = ast => {
         });
       }
     },
+    CallExpression: {
+      exit(path) {
+        const me: Vertex = {
+          node: path.node,
+          kind: open()
+        };
+        path.data.type = me;
+
+        graph = addVertex(graph, me);
+
+        const callee = findVertex(graph, path.node.callee);
+        graph = addEdge(graph, {
+          from: callee,
+          to: me,
+          constraint: (from, to) =>
+            from.type === "func" ? from.returns : ERROR
+          // console.log(
+          //   "from",
+          //   from,
+          //   "to",
+          //   to,
+          //   "returning",
+          //   from.type === "open" ? to : from
+          // ) || from
+        });
+
+        // graph = me.node.arguments
+        //   .map((arg, i) => ({
+        //     from: findVertex(graph, arg),
+        //     to: me,
+        //     constraint: (from, to) => {
+        //       const { params, returns } = to;
+        //       return func(
+        //         [...params.slice(0, i), from, ...params.slice(i + 1)],
+        //         returns
+        //       );
+        //     }
+        //   }))
+        //   .reduce((g, edge) => addEdge(g, edge), graph);
+      }
+    },
     Identifier: {
       exit(path) {
         const me: Vertex = {
@@ -164,9 +219,15 @@ export const collector = ast => {
 
         const binding = path.scope.bindings[me.node.name];
         if (binding && binding.identifier !== me.node) {
+          const parentVertex = findVertex(graph, binding.identifier);
+          // likely will need more sophisticated check for whether the
+          // type of the parent node as been decided on
+          const constrained =
+            filterEdges(graph, ({ from, to }) => to === parentVertex).length >
+            0;
           graph = addEdge(graph, {
-            from: me,
-            to: findVertex(graph, binding.identifier),
+            from: constrained ? parentVertex : me,
+            to: constrained ? me : parentVertex,
             constraint: from => from
           });
         }
@@ -273,6 +334,8 @@ export const collector = ast => {
 
 const constrain = (graph: Graph, vertex: Vertex): Vertex => {
   const edges = graph.edges.filter(({ to }) => to === vertex);
+  // console.log("vertex", vertex);
+  // console.log("edges", edges.map(({ from }) => from));
   if (edges.length === 0) {
     return vertex;
   }
@@ -286,8 +349,9 @@ const constrain = (graph: Graph, vertex: Vertex): Vertex => {
 };
 
 export const resolver = (graph: Graph) => {
-  return graph.vertices.reduce(
-    (g, vertex) => replaceVertex(g, vertex, constrain(g, vertex)),
-    graph
-  );
+  return graph.vertices.reduce((g, vertex) => {
+    const updated = constrain(g, vertex);
+    // console.log("updated vertex", updated);
+    return replaceVertex(g, vertex, updated);
+  }, graph);
 };

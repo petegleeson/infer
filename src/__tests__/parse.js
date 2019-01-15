@@ -55,10 +55,38 @@ it("should infer arrow function type", () => {
   const code = `const f = () => "hello"`;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  console.log("graph", graph);
   const inferred = resolver(graph);
   const types = inferred.vertices.map(({ node, kind }) => ({
     [node.type]: kind
   }));
   expect(types).toEqual(containDeep([{ Identifier: func([], string()) }]));
+});
+
+it("should infer argument function type", () => {
+  const code = `const f = b => b("hello") + 1`;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const inferred = resolver(graph);
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
+  }));
+  expect(types).toEqual(
+    containDeep([{ CallExpression: func([string()], open()) }])
+  );
+});
+
+it("should infer function call type", () => {
+  const code = `
+    const f = () => "hello";
+    const b = f();
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const inferred = resolver(graph);
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
+  }));
+  expect(types).toEqual(
+    containDeep([{ Identifier: func([], string()) }, { Identifier: string() }])
+  );
 });
