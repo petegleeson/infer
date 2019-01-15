@@ -123,7 +123,8 @@ export const collector = ast => {
           graph = addEdge(graph, {
             from: body,
             to: me,
-            constraint: (from, to) => func(to.params, from)
+            constraint: (from, to) =>
+              to.type === "func" ? func(to.params, from) : ERROR
           });
         }
         graph = me.node.params
@@ -293,10 +294,8 @@ export const collector = ast => {
         graph = addEdge(graph, {
           from: me,
           to: parentFunction,
-          constraint: (from, to) => {
-            const { params } = to;
-            return func(params, from);
-          }
+          constraint: (from, to) =>
+            to.type === "func" ? func(to.params, from) : ERROR
         });
 
         const arg = findVertex(graph, path.node.argument);
