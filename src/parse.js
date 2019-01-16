@@ -178,34 +178,38 @@ export const collector = ast => {
         graph = addVertex(graph, me);
 
         const callee = findVertex(graph, path.node.callee);
-        graph = addEdge(graph, {
-          from: callee,
-          to: me,
-          constraint: (from, to) =>
-            from.type === "func" ? from.returns : ERROR
-          // console.log(
-          //   "from",
-          //   from,
-          //   "to",
-          //   to,
-          //   "returning",
-          //   from.type === "open" ? to : from
-          // ) || from
-        });
+        const constrained =
+          filterEdges(graph, ({ from, to }) => to === callee).length > 0;
+        graph = constrained
+          ? addEdge(graph, {
+              from: callee,
+              to: me,
+              constraint: (from, to) =>
+                from.type === "func" ? from.returns : ERROR
+            })
+          : addEdge(graph, {
+              from: me,
+              to: callee,
+              constraint: (from, to) =>
+                func(path.node.arguments.map(open), from)
+            });
 
-        // graph = me.node.arguments
-        //   .map((arg, i) => ({
-        //     from: findVertex(graph, arg),
-        //     to: me,
-        //     constraint: (from, to) => {
-        //       const { params, returns } = to;
-        //       return func(
-        //         [...params.slice(0, i), from, ...params.slice(i + 1)],
-        //         returns
-        //       );
-        //     }
-        //   }))
-        //   .reduce((g, edge) => addEdge(g, edge), graph);
+        graph = me.node.arguments
+          .map((arg, i) => ({
+            from: findVertex(graph, arg),
+            to: callee,
+            constraint: (from, to) => {
+              const { params, returns } = to;
+              return to.type === "func" &&
+                (params[i].type === "open" || params[i].type === from.type)
+                ? func(
+                    [...params.slice(0, i), from, ...params.slice(i + 1)],
+                    returns
+                  )
+                : ERROR;
+            }
+          }))
+          .reduce((g, edge) => addEdge(g, edge), graph);
       }
     },
     Identifier: {

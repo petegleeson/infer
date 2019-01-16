@@ -71,7 +71,10 @@ it("should infer argument function type", () => {
     [node.type]: kind
   }));
   expect(types).toEqual(
-    containDeep([{ CallExpression: func([string()], open()) }])
+    containDeep([
+      { Identifier: func([string()], int()) },
+      { Identifier: func([func([string()], int())], int()) }
+    ])
   );
 });
 
@@ -88,5 +91,24 @@ it("should infer function call type", () => {
   }));
   expect(types).toEqual(
     containDeep([{ Identifier: func([], string()) }, { Identifier: string() }])
+  );
+});
+
+it("should error function call type", () => {
+  const code = `
+    const add = (a, b) => a + b;
+    const b = add(1, "hi");
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const inferred = resolver(graph);
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
+  }));
+  expect(types).toEqual(
+    containDeep([
+      { Identifier: ERROR },
+      { Identifier: func([int(), int()], int()) }
+    ])
   );
 });
