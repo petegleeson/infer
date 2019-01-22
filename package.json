@@ -8,6 +8,7 @@
       "packages/*"
     ]
   },
+  "main": "packages/client/out/extension.js",
   "scripts": {
     "test": "jest"
   },
@@ -21,15 +22,21 @@
     "@babel/core": "^7.0.0-rc.1",
     "@babel/preset-env": "^7.0.0-rc.1",
     "@babel/preset-flow": "^7.0.0-rc.1",
+    "@types/node": "^8.0.0",
     "babel-core": "^7.0.0-0",
     "babel-jest": "^23.4.2",
     "flow-bin": "^0.78.0",
     "flow-typed": "^2.5.1",
     "jest": "^23.4.2",
-    "jest-expect-contain-deep": "^1.0.1"
+    "jest-expect-contain-deep": "^1.0.1",
+    "typescript": "^3.2.4",
+    "vscode": "^1.1.27"
   },
   "dependencies": {
     "@babel/parser": "^7.2.0",
-    "@babel/traverse": "^7.1.6"
+    "@babel/traverse": "^7.1.6",
+    "path": "^0.12.7",
+    "vscode-languageclient": "^4.1.4",
+    "vscode-languageserver": "^4.1.3"
   }
 }

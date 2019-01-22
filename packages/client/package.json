@@ -1,0 +1,21 @@
+{
+  "name": "vscode-client",
+  "description": "VSCode part of a language server",
+  "author": "Microsoft Corporation",
+  "license": "MIT",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.26.0"
+  },
+  "scripts": {
+    "update-vscode": "vscode-install",
+    "postinstall": "vscode-install"
+  },
+  "dependencies": {
+    "path": "^0.12.7",
+    "vscode-languageclient": "^4.1.4"
+  },
+  "devDependencies": {
+    "vscode": "^1.1.27"
+  }
+}
