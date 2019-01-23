@@ -8,7 +8,7 @@
     "vscode": "^1.26.0"
   },
   "activationEvents": [
-    "onLanguage:plaintext"
+    "onLanguage:javascript"
   ],
   "main": "./out/extension",
   "contributes": {
@@ -30,7 +30,7 @@
             "messages",
             "verbose"
           ],
-          "default": "off",
+          "default": "verbose",
           "description": "Traces the communication between VS Code and the language server."
         }
       }
