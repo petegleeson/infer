@@ -7,8 +7,8 @@
       "request": "launch",
       "name": "Launch Client",
       "runtimeExecutable": "${execPath}",
-      "args": ["--extensionDevelopmentPath=${workspaceRoot}"],
-      "outFiles": ["${workspaceRoot}/packages/client/out/**/*.js"]
+      "args": ["--extensionDevelopmentPath=${workspaceRoot}/packages/client"],
+      "outFiles": ["${workspaceRoot}/out/**/*.js"]
     },
     {
       "type": "node",

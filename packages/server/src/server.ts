@@ -155,7 +155,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             uri: textDocument.uri,
             range: Object.assign({}, diagnosic.range)
           },
-          message: "Spelling matters"
+          message: "Spelling MATTERS"
         },
         {
           location: {
