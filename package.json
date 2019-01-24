@@ -11,6 +11,7 @@
   "scripts": {
     "compile": "tsc -b",
     "test": "jest",
+    "build": "cd packages/core && babel src -d dist --root-mode upward",
     "watch": "tsc -b -w"
   },
   "jest": {

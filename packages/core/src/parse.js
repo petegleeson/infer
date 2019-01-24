@@ -20,21 +20,22 @@ export const func = (
   returns
 });
 
-// type CallKind = { type: "call", params: Kind[], returns: Kind };
-// export const call = (
-//   params: Kind[] = [],
-//   returns: Kind = open()
-// ): CallKind => ({
-//   type: "call",
-//   params,
-//   returns
-// });
-
 type Kind = OpenKind | IntKind | StringKind | FuncKind;
 
 export const ERROR = Symbol("CONSTRAINT_ERROR");
 type ConstraintError = typeof ERROR;
 type Constraint = (from: Kind, to: Kind) => Kind | ConstraintError;
+
+export const print = (kind: Kind) => {
+  switch (kind.type) {
+    case "func":
+      return `${
+        kind.params.length === 0 ? "()" : kind.params.map(print).join(" ,")
+      } => ${print(kind.returns)}`;
+    default:
+      return kind.type;
+  }
+};
 
 type Node = Object;
 

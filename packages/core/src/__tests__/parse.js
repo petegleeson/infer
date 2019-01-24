@@ -1,7 +1,6 @@
 // @flow
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
-import { map } from "../graph";
 import { collector, resolver, ERROR, int, func, open, string } from "../parse";
 
 it("should infer type of nodes", () => {

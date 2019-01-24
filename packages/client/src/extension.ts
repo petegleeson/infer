@@ -4,7 +4,13 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as path from "path";
-import { workspace, ExtensionContext } from "vscode";
+import {
+  workspace,
+  ExtensionContext,
+  window,
+  StatusBarItem,
+  StatusBarAlignment
+} from "vscode";
 
 import {
   LanguageClient,
@@ -12,8 +18,10 @@ import {
   ServerOptions,
   TransportKind
 } from "vscode-languageclient";
+import StatusFeature from "./status/StatusFeature";
 
 let client: LanguageClient;
+let myStatusBarItem: StatusBarItem;
 
 export function activate(context: ExtensionContext) {
   // ideally we would import this normally
@@ -54,8 +62,18 @@ export function activate(context: ExtensionContext) {
     clientOptions
   );
 
+  client.registerFeature(new StatusFeature(client));
+
   // Start the client. This will also launch the server
   client.start();
+
+  //setup the status bar
+  // myStatusBarItem = window.createStatusBarItem(StatusBarAlignment.Left, 100);
+  // context.subscriptions.push(myStatusBarItem);
+
+  // context.subscriptions.push(
+  //   window.onDidChangeTextEditorSelection(updateStatusBarItem)
+  // );
 }
 
 export function deactivate(): Thenable<void> | undefined {

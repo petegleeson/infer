@@ -16,6 +16,7 @@ import {
   CompletionItemKind,
   TextDocumentPositionParams
 } from "vscode-languageserver";
+import { parse, collector, resolver, print } from "core";
 
 // Create a connection for the server. The connection uses Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -126,56 +127,47 @@ documents.onDidChangeContent(change => {
   validateTextDocument(change.document);
 });
 
+let graphs = {};
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   // In this simple example we get the settings for every validate run.
   let settings = await getDocumentSettings(textDocument.uri);
 
   // The validator creates diagnostics for all uppercase words length 2 and more
   let text = textDocument.getText();
-  let pattern = /\b[A-Z]{2,}\b/g;
-  let m: RegExpExecArray | null;
+  let ast = parse(text);
+  let graph = collector(ast);
+  let inferred = resolver(graph);
+  graphs[textDocument.uri] = inferred;
 
-  let problems = 0;
-  let diagnostics: Diagnostic[] = [];
-  while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
-    problems++;
-    let diagnosic: Diagnostic = {
-      severity: DiagnosticSeverity.Warning,
-      range: {
-        start: textDocument.positionAt(m.index),
-        end: textDocument.positionAt(m.index + m[0].length)
-      },
-      message: `${m[0]} is all uppercase.`,
-      source: "ex"
-    };
-    if (hasDiagnosticRelatedInformationCapability) {
-      diagnosic.relatedInformation = [
-        {
-          location: {
-            uri: textDocument.uri,
-            range: Object.assign({}, diagnosic.range)
-          },
-          message: "Spelling MATTERS"
-        },
-        {
-          location: {
-            uri: textDocument.uri,
-            range: Object.assign({}, diagnosic.range)
-          },
-          message: "Particularly for names"
-        }
-      ];
-    }
-    diagnostics.push(diagnosic);
-  }
-
-  // Send the computed diagnostics to VSCode.
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+  connection.console.log("inferred types for " + textDocument.uri);
 }
 
 connection.onDidChangeWatchedFiles(_change => {
   // Monitored files have change in VSCode
   connection.console.log("We received an file change event");
+});
+
+const cursorInside = (line, character, { loc }) => {
+  return (
+    (line === loc.start.line && character === loc.start.column) ||
+    (line === loc.end.line && character === loc.end.column)
+  );
+};
+
+connection.onRequest("custom/selectionChanged", ({ uri, line, character }) => {
+  const inferred = graphs[uri];
+  if (inferred) {
+    const type = inferred.vertices
+      .filter(({ node }) => {
+        return cursorInside(line + 1, character + 1, node);
+      })
+      .map(({ kind }) => kind);
+    if (type.length > 0) {
+      connection.sendRequest("custom/typeChanged", print(type[0]));
+    }
+  }
+  return null;
 });
 
 // This handler provides the initial list of the completion items.
