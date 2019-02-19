@@ -25,7 +25,7 @@ export default class StatusFeature implements StaticFeature {
     myStatusBarItem.text = "initializing...";
     myStatusBarItem.show();
     this.client.onRequest("custom/typeChanged", type => {
-      myStatusBarItem.text = `$(megaphone) ${type}`;
+      myStatusBarItem.text = `🦉: ${type}`;
     });
     this.client.onReady().then(() => {
       window.onDidChangeTextEditorSelection(x => {
@@ -36,8 +36,7 @@ export default class StatusFeature implements StaticFeature {
           line,
           character
         });
-        myStatusBarItem.text = `$(megaphone) line: ${line +
-          1} character ${character + 1} selected`;
+        myStatusBarItem.text = `🦉: <none>`;
         myStatusBarItem.show();
       });
     });

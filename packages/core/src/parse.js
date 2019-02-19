@@ -30,7 +30,9 @@ export const print = (kind: Kind) => {
   switch (kind.type) {
     case "func":
       return `${
-        kind.params.length === 0 ? "()" : kind.params.map(print).join(" ,")
+        kind.params.length === 0
+          ? "()"
+          : `(${kind.params.map(print).join(" ,")})`
       } => ${print(kind.returns)}`;
     default:
       return kind.type;
