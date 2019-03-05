@@ -73,6 +73,25 @@ const addVertex = (graph: Graph, node) => {
   };
 };
 
+const cloneVertex = (a: Vertex): Vertex => {
+  const deepClone = obj =>
+    Object.keys(obj).reduce((clone, key) => {
+      if (Array.isArray(obj[key])) {
+        clone[key] = obj[key].map(deepClone);
+      } else if (typeof obj[key] === "object") {
+        clone[key] = deepClone(obj[key]);
+      } else {
+        clone[key] = obj[key];
+      }
+      return clone;
+    }, {});
+  return {
+    node: a.node,
+    kind: deepClone(a.kind),
+    copy: true
+  };
+};
+
 const replaceVertex = (graph: Graph, a: Vertex, b: Vertex) => {
   const pos = graph.vertices.indexOf(a);
   return {
@@ -86,9 +105,19 @@ const replaceVertex = (graph: Graph, a: Vertex, b: Vertex) => {
 };
 
 const addEdge = (graph: Graph, { from, to, constraint }: Edge) => {
+  if (from.node === to.node) {
+    throw Error("cannot add edge between same node");
+  }
   return {
     ...graph,
     edges: [...graph.edges, { from, to, constraint }]
+  };
+};
+
+const removeEdge = (graph: Graph, edge: Edge) => {
+  return {
+    ...graph,
+    edges: graph.edges.filter(e => e !== edge)
   };
 };
 
@@ -100,6 +129,27 @@ const createGraph = () => ({
   vertices: [],
   edges: []
 });
+
+const mergeGraphs = (a: Graph, b: Graph) => ({
+  vertices: [...a.vertices, ...b.vertices],
+  edges: [...a.edges, ...b.edges]
+});
+
+const follow = (graph, vertex, fn) => {
+  const visit = (v, visited = []) => {
+    const outgoing = filterEdges(graph, ({ from }) => from === v);
+    const incoming = filterEdges(graph, ({ to }) => to === v);
+    const unseen = !visited.includes(v);
+    if (unseen) {
+      fn(v, { outgoing, incoming });
+    }
+    return incoming.reduce(
+      (vs, e) => visit(e.from, vs),
+      unseen ? visited.concat(v) : visited
+    );
+  };
+  visit(vertex);
+};
 
 const map = (graph, fn) => ({
   vertices: graph.vertices.map(fn),
@@ -181,38 +231,105 @@ export const collector = ast => {
         graph = addVertex(graph, me);
 
         const callee = findVertex(graph, path.node.callee);
-        const constrained =
-          filterEdges(graph, ({ from, to }) => to === callee).length > 0;
-        graph = constrained
-          ? addEdge(graph, {
-              from: callee,
-              to: me,
-              constraint: (from, to) =>
-                from.type === "func" ? from.returns : ERROR
-            })
-          : addEdge(graph, {
-              from: me,
-              to: callee,
-              constraint: (from, to) =>
-                func(path.node.arguments.map(open), from)
-            });
+        const incoming = filterEdges(graph, ({ from, to }) => to === callee);
+        const constrained = incoming.length > 0;
+        if (constrained) {
+          const [{ from: start }] = incoming;
 
-        graph = me.node.arguments
-          .map((arg, i) => ({
-            from: findVertex(graph, arg),
-            to: callee,
-            constraint: (from, to) => {
-              const { params, returns } = to;
-              return to.type === "func" &&
-                (params[i].type === "open" || params[i].type === from.type)
-                ? func(
-                    [...params.slice(0, i), from, ...params.slice(i + 1)],
-                    returns
-                  )
-                : ERROR;
+          let declaration;
+          let copied = createGraph();
+          // copy vertices
+          follow(graph, start, v => {
+            if (!declaration && v.kind.type === "func") {
+              declaration = v;
             }
-          }))
-          .reduce((g, edge) => addEdge(g, edge), graph);
+            const clone = cloneVertex(v);
+            copied = addVertex(copied, clone);
+          });
+          // copy edges
+          follow(graph, start, (v, e) => {
+            copied = e.incoming.reduce((g, { from, to, constraint }) => {
+              return addEdge(g, {
+                from: findVertex(g, from.node),
+                to: findVertex(g, to.node),
+                constraint
+              });
+            }, copied);
+          });
+
+          // swap direction of edges pointing to arguments
+          copied = me.node.arguments
+            .map((arg, i) => findVertex(copied, declaration.node.params[i]))
+            .reduce((g, vertex) => {
+              const into = filterEdges(
+                g,
+                ({ to, from }) => to === vertex && from.kind.type !== "func"
+              );
+              const removed = into.reduce(removeEdge, g);
+              return into.reduce(
+                (x, { from, to, constraint }) =>
+                  addEdge(x, {
+                    from: to,
+                    to: from,
+                    constraint
+                  }),
+                removed
+              );
+            }, copied);
+
+          graph = mergeGraphs(graph, copied);
+
+          // link arguments
+          graph = me.node.arguments
+            .map((arg, i) => ({
+              from: findVertex(graph, arg),
+              to: findVertex(copied, declaration.node.params[i]),
+              constraint: (from, to) => {
+                // console.log("constraining param", from);
+                return to.type === "open" || to.type === from.type
+                  ? from
+                  : ERROR;
+              }
+            }))
+            .reduce((g, edge) => addEdge(g, edge), graph);
+
+          // link callee's return type to me
+          graph = addEdge(graph, {
+            from: callee,
+            to: me,
+            constraint: (from, to) =>
+              from.type === "func" ? from.returns : ERROR
+          });
+          // link callee to copied graph
+          graph = removeEdge(graph, incoming[0]);
+          graph = addEdge(graph, {
+            from: findVertex(copied, start.node),
+            to: callee,
+            constraint: from => from
+          });
+        } else {
+          graph = addEdge(graph, {
+            from: me,
+            to: callee,
+            constraint: (from, to) => func(path.node.arguments.map(open), from)
+          });
+          graph = me.node.arguments
+            .map((arg, i) => ({
+              from: findVertex(graph, arg),
+              to: callee,
+              constraint: (from, to) => {
+                const { params, returns } = to;
+                return to.type === "func" &&
+                  (params[i].type === "open" || params[i].type === from.type)
+                  ? func(
+                      [...params.slice(0, i), from, ...params.slice(i + 1)],
+                      returns
+                    )
+                  : ERROR;
+              }
+            }))
+            .reduce((g, edge) => addEdge(g, edge), graph);
+        }
       }
     },
     Identifier: {
@@ -340,8 +457,6 @@ export const collector = ast => {
 
 const constrain = (graph: Graph, vertex: Vertex): Vertex => {
   const edges = graph.edges.filter(({ to }) => to === vertex);
-  // console.log("vertex", vertex);
-  // console.log("edges", edges.map(({ from }) => from));
   if (edges.length === 0) {
     return vertex;
   }
@@ -350,14 +465,12 @@ const constrain = (graph: Graph, vertex: Vertex): Vertex => {
     (k, edge) => edge.constraint(constrain(graph, edge.from).kind, k),
     vertex.kind
   );
-  // update vertex in graph
   return { ...vertex, kind };
 };
 
 export const resolver = (graph: Graph) => {
   return graph.vertices.reduce((g, vertex) => {
     const updated = constrain(g, vertex);
-    // console.log("updated vertex", updated);
     return replaceVertex(g, vertex, updated);
   }, graph);
 };

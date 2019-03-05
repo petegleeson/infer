@@ -111,3 +111,22 @@ it("should error function call type", () => {
     ])
   );
 });
+
+it("should narrow function call type", () => {
+  const code = `
+    const i = (a) => a;
+    const b = i(1);
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const inferred = resolver(graph);
+  const types = inferred.vertices.map(({ node, kind }) => ({
+    [node.type]: kind
+  }));
+  expect(types).toEqual(
+    expect.arrayContaining([
+      { Identifier: func([open()], open()) },
+      { Identifier: func([int()], int()) }
+    ])
+  );
+});
