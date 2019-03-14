@@ -1,7 +1,16 @@
 // @flow
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
-import { collector, resolver, ERROR, int, func, open, string } from "../parse";
+import {
+  collector,
+  resolver,
+  ERROR,
+  int,
+  func,
+  open,
+  string,
+  binOp
+} from "../parse";
 
 it("should infer type of nodes", () => {
   const code = `n + 1;`;
@@ -15,7 +24,7 @@ it("should infer type of nodes", () => {
     containDeep([
       { Identifier: int() },
       { NumericLiteral: int() },
-      { BinaryExpression: int() }
+      { BinaryExpression: binOp(int()) }
     ])
   );
 });
