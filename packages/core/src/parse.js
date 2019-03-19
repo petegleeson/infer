@@ -1,458 +1,214 @@
 // @flow
 import traverse from "@babel/traverse";
+import * as t from "@babel/types";
 
-type OpenKind = { type: "open" };
-export const open = (): OpenKind => ({ type: "open" });
+const toObj = obj => (res, k) => (res[k] = obj[k]);
 
-type IntKind = { type: "int" };
-export const int = (): IntKind => ({ type: "int" });
+type BoolType = { name: "bool" };
+export const boolT = (): BoolType => ({ name: "bool" });
+const isBoolT = (ty: Type) => ty.name === "bool";
 
-type StringKind = { type: "string" };
-export const string = (): StringKind => ({ type: "string" });
-
-type FuncKind = { type: "func", params: Kind[], returns: Kind };
-export const func = (
-  params: Kind[] = [],
-  returns: Kind = open()
-): FuncKind => ({
-  type: "func",
+type FuncType = { name: "func", params: Type[], returns: Type };
+export const funcT = (params: Type[], returns: Type): FuncType => ({
+  name: "func",
   params,
   returns
 });
+const isFuncT = (ty: Type) => ty.name === "func";
 
-type Kind = OpenKind | IntKind | StringKind | FuncKind;
+type IntType = { name: "int" };
+export const intT = (): IntType => ({ name: "int" });
+const isIntT = (ty: Type) => ty.name === "int";
 
-export const ERROR = Symbol("CONSTRAINT_ERROR");
-type ConstraintError = typeof ERROR;
-type Constraint = (from: Kind, to: Kind) => Kind | ConstraintError;
+type VarType = { name: "var", id: string };
+export const varT = (id: string): VarType => ({ name: "var", id });
+const isVarT = (ty: Type) => ty.name === "var";
+const getVarTId = (() => {
+  let id = 0;
+  return () => `$${++id}`;
+})();
 
-export const print = (kind: Kind) => {
-  switch (kind.type) {
-    case "func":
-      return `${
-        kind.params.length === 0
-          ? "()"
-          : `(${kind.params.map(print).join(" ,")})`
-      } => ${print(kind.returns)}`;
-    default:
-      return kind.type;
-  }
-};
+type Type = IntType | BoolType | FuncType | VarType;
 
-type Node = Object;
+type Scheme = { vars: string[], type: Type };
+const createScheme = (vars: string[], type: Type): Scheme => ({
+  vars,
+  type
+});
 
-type Vertex = {
-  kind: Kind,
-  node: Node
-};
+type Context = { [id: string]: Scheme };
+const createCtx = (): Context => ({});
 
-type Edge = {
-  from: Vertex,
-  to: Vertex,
-  constraint: Constraint
-};
-
-type Graph = {
-  vertices: Vertex[],
-  edges: Edge[]
-};
-
-const findVertex = (graph: Graph, node) => {
-  const res = graph.vertices.find(vertex => vertex.node === node);
-  if (!res) {
-    console.log(node);
-    throw Error("can't find node");
-  }
-  return res;
-};
-
-const addVertex = (graph: Graph, node) => {
-  return {
-    ...graph,
-    vertices: [...graph.vertices, node]
-  };
-};
-
-const cloneVertex = (a: Vertex): Vertex => {
-  const deepClone = obj =>
-    Object.keys(obj).reduce((clone, key) => {
-      if (Array.isArray(obj[key])) {
-        clone[key] = obj[key].map(deepClone);
-      } else if (typeof obj[key] === "object") {
-        clone[key] = deepClone(obj[key]);
-      } else {
-        clone[key] = obj[key];
-      }
-      return clone;
+type Substitution = { [id: string]: Type };
+const createSubst = (): Substitution => ({});
+const deleteSubst = (subst, keys): Substitution =>
+  Object.keys(subst)
+    .filter(k => keys.includes(k))
+    .reduce((res, k) => {
+      res[k] = subst[k];
+      return res;
     }, {});
-  return {
-    node: a.node,
-    kind: deepClone(a.kind),
-    copy: true
-  };
-};
 
-const replaceVertex = (graph: Graph, a: Vertex, b: Vertex) => {
-  const pos = graph.vertices.indexOf(a);
-  return {
-    ...graph,
-    vertices: [
-      ...graph.vertices.slice(0, pos),
-      b,
-      ...graph.vertices.slice(pos + 1)
-    ]
-  };
-};
-
-const addEdge = (graph: Graph, { from, to, constraint }: Edge) => {
-  if (from.node === to.node) {
-    throw Error("cannot add edge between same node");
-  }
-  return {
-    ...graph,
-    edges: [...graph.edges, { from, to, constraint }]
-  };
-};
-
-const removeEdge = (graph: Graph, edge: Edge) => {
-  return {
-    ...graph,
-    edges: graph.edges.filter(e => e !== edge)
-  };
-};
-
-const filterEdges = (graph: Graph, fn) => {
-  return graph.edges.filter(fn);
-};
-
-const createGraph = () => ({
-  vertices: [],
-  edges: []
-});
-
-const mergeGraphs = (a: Graph, b: Graph) => ({
-  vertices: [...a.vertices, ...b.vertices],
-  edges: [...a.edges, ...b.edges]
-});
-
-const follow = (graph, vertex, fn) => {
-  const visit = (v, visited = []) => {
-    const outgoing = filterEdges(graph, ({ from }) => from === v);
-    const incoming = filterEdges(graph, ({ to }) => to === v);
-    const unseen = !visited.includes(v);
-    if (unseen) {
-      fn(v, { outgoing, incoming });
-    }
-    return incoming.reduce(
-      (vs, e) => visit(e.from, vs),
-      unseen ? visited.concat(v) : visited
+const applySubst = (subst: Substitution, ty: Type): Type => {
+  if (isVarT(ty)) {
+    return subst[ty.id] || ty;
+  } else if (isFuncT(ty)) {
+    return funcT(
+      ty.params.map(pty => applySubst(subst, pty)),
+      applySubst(subst, ty.returns)
     );
-  };
-  visit(vertex);
+  } else if (isBoolT(ty)) {
+    return ty;
+  } else if (isIntT(ty)) {
+    return ty;
+  }
+  throw ty;
 };
 
-const map = (graph, fn) => ({
-  vertices: graph.vertices.map(fn),
-  edges: graph.edges
-});
+const applySubstScheme = (
+  subst: Substitution,
+  { vars, type }: Scheme
+): Scheme => {
+  return createScheme(
+    vars,
+    applySubst(deleteSubst(subst, vars.map(v => v.id)), type)
+  );
+};
+
+const applySubstContext = (subst: Substitution, ctx: Context): Context =>
+  Object.keys(ctx).reduce((res, k) => {
+    res[k] = applySubstScheme(subst, ctx[k]);
+    return res;
+  }, {});
+
+const composeSubst = (s1: Substitution, s2: Substitution): Substitution => {
+  throw s1;
+  return createSubst();
+};
+
+const instantiate = ({ vars, type }: Scheme): Type => {
+  const newVars = vars.map(varT);
+  const subst: Substitution = vars.reduce((s, v, i) => {
+    s[v] = newVars[i];
+    return s;
+  }, {});
+  return applySubst(subst, type);
+};
+
+const getId = node =>
+  `${node.loc.start.line}${node.loc.start.column}${node.loc.end.line}${
+    node.loc.end.column
+  }`;
+
+const emptyState = {
+  context: createCtx(),
+  skip: p => false
+};
 
 export const collector = ast => {
-  let graph = createGraph();
-  traverse(ast, {
-    ArrowFunctionExpression: {
-      enter(path) {
-        const { id, params } = path.node;
-        const me: Vertex = {
-          node: path.node,
-          kind: func(params.map(open))
-        };
-
-        graph = addVertex(graph, me);
-      },
-      exit(path) {
-        const me = findVertex(graph, path.node);
-        if (path.node.body.type !== "BlockExpression") {
-          const body = findVertex(graph, path.node.body);
-          graph = addEdge(graph, {
-            from: body,
-            to: me,
-            constraint: (from, to) =>
-              to.type === "func" ? func(to.params, from) : ERROR
-          });
-        }
-        graph = me.node.params
-          .map((param, i) => ({
-            from: findVertex(graph, param),
-            to: me,
-            constraint: (from, to) => {
-              const { params, returns } = to;
-              return func(
-                [...params.slice(0, i), from, ...params.slice(i + 1)],
-                returns
-              );
-            }
-          }))
-          .reduce((g, edge) => addEdge(g, edge), graph);
+  let nodes = {};
+  const visitor = {
+    BooleanLiteral(path, state = emptyState) {
+      if (state.skip(path)) {
+        path.skip();
+        return;
       }
+      path.data = {
+        subst: createSubst(),
+        type: boolT()
+      };
+      nodes[getId(path.node)] = {
+        node: path.node,
+        ...path.data
+      };
     },
-    BinaryExpression: {
-      exit(path) {
-        const { left, right } = path.node;
-        const me: Vertex = {
-          node: path.node,
-          kind: int()
-        };
-        path.data.type = me;
-        graph = addVertex(graph, me);
-
-        graph = addEdge(graph, {
-          from: me,
-          to: findVertex(graph, left),
-          constraint: (from, to) =>
-            to.type === "open" || to.type === "int" ? int() : ERROR
-        });
-
-        graph = addEdge(graph, {
-          from: me,
-          to: findVertex(graph, right),
-          constraint: (from, to) =>
-            to.type === "open" || to.type === "int" ? int() : ERROR
-        });
+    CallExpression(path, state = emptyState) {
+      if (state.skip(path)) {
+        path.skip();
+        return;
       }
+      console.log("CallExpression");
+      const tyRes = varT(getVarTId());
+      const callee = path.get("callee");
+      path.traverse(visitor, {
+        ...state,
+        skip: p => path.node.arguments.includes(p.node)
+      });
+      console.log("traversing again");
+      path.traverse(visitor, {
+        ...state,
+        skip: p => p.node === callee.node
+      });
+      // path.get("callee").traverse(visitor, state);
+      // console.log(path.get("callee").data);
+      path.skip();
     },
-    CallExpression: {
-      exit(path) {
-        const me: Vertex = {
-          node: path.node,
-          kind: open()
-        };
-        path.data.type = me;
-
-        graph = addVertex(graph, me);
-
-        const callee = findVertex(graph, path.node.callee);
-        const incoming = filterEdges(graph, ({ from, to }) => to === callee);
-        const constrained = incoming.length > 0;
-        if (constrained) {
-          const [{ from: start }] = incoming;
-
-          let declaration;
-          let copied = createGraph();
-          // copy vertices
-          follow(graph, start, v => {
-            if (!declaration && v.kind.type === "func") {
-              declaration = v;
-            }
-            const clone = cloneVertex(v);
-            copied = addVertex(copied, clone);
-          });
-          // copy edges
-          follow(graph, start, (v, e) => {
-            copied = e.incoming.reduce((g, { from, to, constraint }) => {
-              return addEdge(g, {
-                from: findVertex(g, from.node),
-                to: findVertex(g, to.node),
-                constraint
-              });
-            }, copied);
-          });
-
-          // swap direction of edges pointing to arguments
-          copied = me.node.arguments
-            .map((arg, i) => findVertex(copied, declaration.node.params[i]))
-            .reduce((g, vertex) => {
-              const into = filterEdges(
-                g,
-                ({ to, from }) => to === vertex && from.kind.type !== "func"
-              );
-              const removed = into.reduce(removeEdge, g);
-              return into.reduce(
-                (x, { from, to, constraint }) =>
-                  addEdge(x, {
-                    from: to,
-                    to: from,
-                    constraint
-                  }),
-                removed
-              );
-            }, copied);
-
-          graph = mergeGraphs(graph, copied);
-
-          // link arguments
-          graph = me.node.arguments
-            .map((arg, i) => ({
-              from: findVertex(graph, arg),
-              to: findVertex(copied, declaration.node.params[i]),
-              constraint: (from, to) => {
-                // console.log("constraining param", from);
-                return to.type === "open" || to.type === from.type
-                  ? from
-                  : ERROR;
-              }
-            }))
-            .reduce((g, edge) => addEdge(g, edge), graph);
-
-          // link callee's return type to me
-          graph = addEdge(graph, {
-            from: callee,
-            to: me,
-            constraint: (from, to) =>
-              from.type === "func" ? from.returns : ERROR
-          });
-          // link callee to copied graph
-          graph = removeEdge(graph, incoming[0]);
-          graph = addEdge(graph, {
-            from: findVertex(copied, start.node),
-            to: callee,
-            constraint: from => from
-          });
-        } else {
-          graph = addEdge(graph, {
-            from: me,
-            to: callee,
-            constraint: (from, to) => func(path.node.arguments.map(open), from)
-          });
-          graph = me.node.arguments
-            .map((arg, i) => ({
-              from: findVertex(graph, arg),
-              to: callee,
-              constraint: (from, to) => {
-                const { params, returns } = to;
-                return to.type === "func" &&
-                  (params[i].type === "open" || params[i].type === from.type)
-                  ? func(
-                      [...params.slice(0, i), from, ...params.slice(i + 1)],
-                      returns
-                    )
-                  : ERROR;
-              }
-            }))
-            .reduce((g, edge) => addEdge(g, edge), graph);
-        }
+    Function(path, state = emptyState) {
+      if (state.skip(path)) {
+        path.skip();
+        return;
       }
+      console.log("Function");
+      const paramTypes = path.node.params.map(p => varT(p.name));
+      let tempContext = state.context;
+      paramTypes.forEach(param => {
+        tempContext[param.id] = createScheme([], param);
+      });
+      // ideally skip params like: path.get('body').traverse(visitor, state)
+      path.traverse(visitor, {
+        ...state,
+        skip: p => path.node.params.includes(p.node)
+      });
+      const { subst: s1, type: bodyType } = path.get("body").data;
+      path.data = {
+        subst: s1,
+        type: funcT(paramTypes.map(param => applySubst(s1, param)), bodyType)
+      };
+      nodes[getId(path.node)] = {
+        node: path.node,
+        ...path.data
+      };
+      path.skip();
     },
-    Identifier: {
-      exit(path) {
-        const me: Vertex = {
-          node: path.node,
-          kind: open()
-        };
-        path.data.type = me;
-
-        graph = addVertex(graph, me);
-
-        const binding = path.scope.bindings[me.node.name];
-        if (binding && binding.identifier !== me.node) {
-          const parentVertex = findVertex(graph, binding.identifier);
-          // likely will need more sophisticated check for whether the
-          // type of the parent node as been decided on
-          const constrained =
-            filterEdges(graph, ({ from, to }) => to === parentVertex).length >
-            0;
-          graph = addEdge(graph, {
-            from: constrained ? parentVertex : me,
-            to: constrained ? me : parentVertex,
-            constraint: from => from
-          });
-        }
+    Identifier(path, state = emptyState) {
+      if (state.skip(path)) {
+        path.skip();
+        return;
       }
+      console.log("Identifier");
+      const scheme = state.context[path.node.name];
+      // console.log(path.node);
+      // console.log(path.parent.params);
+      // console.log("scheme", scheme);
+      if (!scheme) throw "node not found in scheme";
+      path.data = {
+        subst: createSubst(),
+        type: instantiate(scheme)
+      };
+      nodes[getId(path.node)] = {
+        node: path.node,
+        ...path.data
+      };
     },
-    FunctionDeclaration: {
-      enter(path) {
-        const { id, params } = path.node;
-        const me: Vertex = {
-          node: path.node,
-          kind: func(params.map(open))
-        };
-
-        graph = addVertex(graph, me);
-      },
-      exit(path) {
-        const me = findVertex(graph, path.node);
-        if (path.node.id) {
-          const id = findVertex(graph, path.node.id);
-          graph = addEdge(graph, {
-            from: me,
-            to: id,
-            constraint: from => from
-          });
-        }
-        graph = me.node.params
-          .map((param, i) => ({
-            from: findVertex(graph, param),
-            to: me,
-            constraint: (from, to) => {
-              const { params, returns } = to;
-              return func(
-                [...params.slice(0, i), from, ...params.slice(i + 1)],
-                returns
-              );
-            }
-          }))
-          .reduce((g, edge) => addEdge(g, edge), graph);
+    NumericLiteral(path, state = emptyState) {
+      if (state.skip(path)) {
+        path.skip();
+        return;
       }
-    },
-    NumericLiteral: {
-      exit(path) {
-        const me: Vertex = {
-          node: path.node,
-          kind: int()
-        };
-        path.data.type = me;
-
-        graph = addVertex(graph, me);
-      }
-    },
-    ReturnStatement: {
-      exit(path) {
-        const me: Vertex = {
-          node: path.node,
-          kind: open()
-        };
-        path.data.type = me;
-
-        graph = addVertex(graph, me);
-
-        const parentFunction = findVertex(graph, path.getFunctionParent().node);
-        graph = addEdge(graph, {
-          from: me,
-          to: parentFunction,
-          constraint: (from, to) =>
-            to.type === "func" ? func(to.params, from) : ERROR
-        });
-
-        const arg = findVertex(graph, path.node.argument);
-        graph = addEdge(graph, {
-          from: arg,
-          to: me,
-          constraint: from => from
-        });
-      }
-    },
-    StringLiteral: {
-      exit(path) {
-        const me: Vertex = {
-          node: path.node,
-          kind: string()
-        };
-        path.data.type = me;
-
-        graph = addVertex(graph, me);
-      }
-    },
-    VariableDeclarator: {
-      exit(path) {
-        const { id, init } = path.node;
-        graph = addEdge(graph, {
-          from: findVertex(graph, init),
-          to: findVertex(graph, id),
-          constraint: from => from
-        });
-      }
+      console.log("NumericLiteral");
+      path.data = {
+        subst: createSubst(),
+        type: intT()
+      };
+      nodes[getId(path.node)] = {
+        node: path.node,
+        ...path.data
+      };
     }
-  });
-  return graph;
+  };
+
+  traverse(ast, visitor);
+  return nodes;
 };
 
 const constrain = (graph: Graph, vertex: Vertex): Vertex => {
