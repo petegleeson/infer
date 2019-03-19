@@ -40,6 +40,7 @@ type Context = { [id: string]: Scheme };
 const createCtx = (): Context => ({});
 
 type Substitution = { [id: string]: Type };
+const emptySubst = (): Substitution => ({});
 const createSubst = (): Substitution => ({});
 const deleteSubst = (subst, keys): Substitution =>
   Object.keys(subst)
@@ -82,8 +83,13 @@ const applySubstContext = (subst: Substitution, ctx: Context): Context =>
   }, {});
 
 const composeSubst = (s1: Substitution, s2: Substitution): Substitution => {
-  throw s1;
-  return createSubst();
+  return {
+    ...s1,
+    ...Object.keys(s2).reduce((subst, k) => {
+      subst[k] = applySubst(s1, s2[k]);
+      return subst;
+    }, {})
+  };
 };
 
 const instantiate = ({ vars, type }: Scheme): Type => {
@@ -93,6 +99,40 @@ const instantiate = ({ vars, type }: Scheme): Type => {
     return s;
   }, {});
   return applySubst(subst, type);
+};
+
+const varBind = (id: string, ty: Type): Substitution => {
+  // a U a
+  if (id === ty.name) {
+    return emptySubst();
+  } else if (
+    isFuncT(ty) &&
+    (ty.params.find(p => isVarT(p) && p.name === id) ||
+      (isVarT(ty.returns) && ty.returns.name === id))
+  ) {
+    throw `${id} occurs in more complex type ${ty.name}`;
+  }
+  return {
+    [id]: ty
+  };
+};
+
+const unify = (ty1: Type, ty2: Type): Substitution => {
+  if (isIntT(ty1) && isIntT(ty2)) {
+    return emptySubst();
+  } else if (isBoolT(ty1) && isBoolT(ty2)) {
+    return emptySubst();
+  } else if (isFuncT(ty1) && isFuncT(ty2)) {
+    // only support 1 arg for now
+    const s1 = unify(ty1.params[0], ty2.params[0]);
+    const s2 = unify(applySubst(s1, ty1.returns), applySubst(s1, ty2.returns));
+    return composeSubst(s1, s2);
+  } else if (isVarT(ty1)) {
+    return varBind(ty1.id, ty2);
+  } else if (isVarT(ty2)) {
+    return varBind(ty2.id, ty1);
+  }
+  throw `types do not unify: ${ty1.name} and ${ty2.name}`;
 };
 
 const getId = node =>
@@ -129,18 +169,34 @@ export const collector = ast => {
       }
       console.log("CallExpression");
       const tyRes = varT(getVarTId());
-      const callee = path.get("callee");
+
       path.traverse(visitor, {
         ...state,
         skip: p => path.node.arguments.includes(p.node)
       });
-      console.log("traversing again");
+      const { subst: s1, type: tyFun } = path.get("callee").data;
+
       path.traverse(visitor, {
-        ...state,
-        skip: p => p.node === callee.node
+        context: applySubstContext(s1, state.context),
+        skip: p => p.node === path.node.callee
       });
-      // path.get("callee").traverse(visitor, state);
-      // console.log(path.get("callee").data);
+      // only consider one arg for now
+      const [{ subst: s2, type: tyArg }] = path
+        .get("arguments")
+        .map(arg => arg.data);
+
+      const s3 = unify(applySubst(s2, tyFun), funcT([tyArg], tyRes));
+
+      const subst = composeSubst(s3, composeSubst(s2, s1));
+
+      path.data = {
+        subst: subst,
+        type: applySubst(subst, tyRes)
+      };
+      nodes[getId(path.node)] = {
+        node: path.node,
+        ...path.data
+      };
       path.skip();
     },
     Function(path, state = emptyState) {
@@ -177,9 +233,6 @@ export const collector = ast => {
       }
       console.log("Identifier");
       const scheme = state.context[path.node.name];
-      // console.log(path.node);
-      // console.log(path.parent.params);
-      // console.log("scheme", scheme);
       if (!scheme) throw "node not found in scheme";
       path.data = {
         subst: createSubst(),
