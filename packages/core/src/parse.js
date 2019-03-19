@@ -180,13 +180,18 @@ export const collector = ast => {
         skip: p => p.node === path.node.callee
       });
       // only consider one arg for now
-      const [{ subst: s2, type: tyArg }] = path
-        .get("arguments")
-        .map(arg => arg.data);
+      const s2s = path.get("arguments").map(arg => arg.data);
 
-      const s3 = unify(applySubst(s2, tyFun), funcT([tyArg], tyRes));
+      const argSubst = s2s.reduce((s, { subst }) => {
+        return composeSubst(s, subst);
+      }, emptySubst());
 
-      const subst = composeSubst(s3, composeSubst(s2, s1));
+      const s3 = unify(
+        applySubst(argSubst, tyFun),
+        funcT(s2s.map(({ type }) => type), tyRes)
+      );
+
+      const subst = composeSubst(s3, composeSubst(argSubst, s1));
 
       path.data = {
         subst: subst,
