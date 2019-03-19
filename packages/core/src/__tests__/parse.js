@@ -37,6 +37,9 @@ it("should infer identity call type", () => {
   expect(res).toContainEqual({
     CallExpression: intT()
   });
+  expect(res).toContainEqual({
+    ArrowFunctionExpression: funcT([varT("x")], varT("x"))
+  });
 });
 
 it("should infer multi arg function type", () => {

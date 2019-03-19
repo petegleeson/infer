@@ -23,10 +23,6 @@ const isIntT = (ty: Type) => ty.name === "int";
 type VarType = { name: "var", id: string };
 export const varT = (id: string): VarType => ({ name: "var", id });
 const isVarT = (ty: Type) => ty.name === "var";
-const getVarTId = (() => {
-  let id = 0;
-  return () => `$${++id}`;
-})();
 
 type Type = IntType | BoolType | FuncType | VarType;
 
@@ -145,21 +141,25 @@ const getId = node =>
     node.loc.end.column
   }`;
 
-const emptyState = {
+const emptyState = () => ({
   context: createCtx(),
+  getVarTId: (() => {
+    let id = 0;
+    return () => `$${++id}`;
+  })(),
   skip: p => false
-};
+});
 
 export const collector = ast => {
   let nodes = {};
   const visitor = {
-    enter(path, state = emptyState) {
+    enter(path, state = emptyState()) {
       if (state.skip(path)) {
         path.skip();
         return;
       }
     },
-    BooleanLiteral(path, state = emptyState) {
+    BooleanLiteral(path, state = emptyState()) {
       path.data = {
         subst: emptySubst(),
         type: boolT()
@@ -169,9 +169,9 @@ export const collector = ast => {
         ...path.data
       };
     },
-    CallExpression(path, state = emptyState) {
+    CallExpression(path, state = emptyState()) {
       // console.log("CallExpression");
-      const tyRes = varT(getVarTId());
+      const tyRes = varT(state.getVarTId());
 
       path.traverse(visitor, {
         ...state,
@@ -180,6 +180,7 @@ export const collector = ast => {
       const { subst: s1, type: tyFun } = path.get("callee").data;
 
       path.traverse(visitor, {
+        ...state,
         context: applySubstContext(s1, state.context),
         skip: p => p.node === path.node.callee
       });
@@ -206,15 +207,15 @@ export const collector = ast => {
       };
       path.skip();
     },
-    Function(path, state = emptyState) {
+    Function(path, state = emptyState()) {
       // console.log("Function");
       const paramTypes = path.node.params.map(p => varT(p.name));
       let tempContext = state.context;
       paramTypes.forEach(param => {
         tempContext[param.id] = createScheme([], param);
       });
-      // ideally skip params like: path.get('body').traverse(visitor, state)
       path.traverse(visitor, {
+        ...state,
         context: tempContext,
         skip: p => path.node.params.includes(p.node)
       });
@@ -229,7 +230,7 @@ export const collector = ast => {
       };
       path.skip();
     },
-    Identifier(path, state = emptyState) {
+    Identifier(path, state = emptyState()) {
       // console.log("Identifier");
       const scheme = state.context[path.node.name];
       if (!scheme) throw "node not found in scheme";
@@ -242,7 +243,7 @@ export const collector = ast => {
         ...path.data
       };
     },
-    NumericLiteral(path, state = emptyState) {
+    NumericLiteral(path, state = emptyState()) {
       // console.log("NumericLiteral");
       path.data = {
         subst: emptySubst(),
