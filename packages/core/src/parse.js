@@ -41,7 +41,6 @@ const createCtx = (): Context => ({});
 
 type Substitution = { [id: string]: Type };
 const emptySubst = (): Substitution => ({});
-const createSubst = (): Substitution => ({});
 const deleteSubst = (subst, keys): Substitution =>
   Object.keys(subst)
     .filter(k => keys.includes(k))
@@ -154,7 +153,7 @@ export const collector = ast => {
         return;
       }
       path.data = {
-        subst: createSubst(),
+        subst: emptySubst(),
         type: boolT()
       };
       nodes[getId(path.node)] = {
@@ -212,7 +211,7 @@ export const collector = ast => {
       });
       // ideally skip params like: path.get('body').traverse(visitor, state)
       path.traverse(visitor, {
-        ...state,
+        context: tempContext,
         skip: p => path.node.params.includes(p.node)
       });
       const { subst: s1, type: bodyType } = path.get("body").data;
@@ -235,7 +234,7 @@ export const collector = ast => {
       const scheme = state.context[path.node.name];
       if (!scheme) throw "node not found in scheme";
       path.data = {
-        subst: createSubst(),
+        subst: emptySubst(),
         type: instantiate(scheme)
       };
       nodes[getId(path.node)] = {
@@ -250,7 +249,7 @@ export const collector = ast => {
       }
       console.log("NumericLiteral");
       path.data = {
-        subst: createSubst(),
+        subst: emptySubst(),
         type: intT()
       };
       nodes[getId(path.node)] = {
