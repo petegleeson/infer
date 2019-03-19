@@ -121,9 +121,15 @@ const unify = (ty1: Type, ty2: Type): Substitution => {
     return emptySubst();
   } else if (isBoolT(ty1) && isBoolT(ty2)) {
     return emptySubst();
-  } else if (isFuncT(ty1) && isFuncT(ty2)) {
-    // only support 1 arg for now
-    const s1 = unify(ty1.params[0], ty2.params[0]);
+  } else if (
+    isFuncT(ty1) &&
+    isFuncT(ty2) &&
+    ty1.params.length === ty2.params.length
+  ) {
+    const s1 = ty1.params.reduce(
+      (subst, p1, i) => composeSubst(subst, unify(p1, ty2.params[i])),
+      emptySubst()
+    );
     const s2 = unify(applySubst(s1, ty1.returns), applySubst(s1, ty2.returns));
     return composeSubst(s1, s2);
   } else if (isVarT(ty1)) {
@@ -147,11 +153,13 @@ const emptyState = {
 export const collector = ast => {
   let nodes = {};
   const visitor = {
-    BooleanLiteral(path, state = emptyState) {
+    enter(path, state = emptyState) {
       if (state.skip(path)) {
         path.skip();
         return;
       }
+    },
+    BooleanLiteral(path, state = emptyState) {
       path.data = {
         subst: emptySubst(),
         type: boolT()
@@ -162,11 +170,7 @@ export const collector = ast => {
       };
     },
     CallExpression(path, state = emptyState) {
-      if (state.skip(path)) {
-        path.skip();
-        return;
-      }
-      console.log("CallExpression");
+      // console.log("CallExpression");
       const tyRes = varT(getVarTId());
 
       path.traverse(visitor, {
@@ -179,19 +183,18 @@ export const collector = ast => {
         context: applySubstContext(s1, state.context),
         skip: p => p.node === path.node.callee
       });
-      // only consider one arg for now
-      const s2s = path.get("arguments").map(arg => arg.data);
 
-      const argSubst = s2s.reduce((s, { subst }) => {
+      const tyArgs = path.get("arguments").map(arg => arg.data);
+      const s2 = tyArgs.reduce((s, { subst }) => {
         return composeSubst(s, subst);
       }, emptySubst());
 
       const s3 = unify(
-        applySubst(argSubst, tyFun),
-        funcT(s2s.map(({ type }) => type), tyRes)
+        applySubst(s2, tyFun),
+        funcT(tyArgs.map(a => a.type), tyRes)
       );
 
-      const subst = composeSubst(s3, composeSubst(argSubst, s1));
+      const subst = composeSubst(s3, composeSubst(s2, s1));
 
       path.data = {
         subst: subst,
@@ -204,11 +207,7 @@ export const collector = ast => {
       path.skip();
     },
     Function(path, state = emptyState) {
-      if (state.skip(path)) {
-        path.skip();
-        return;
-      }
-      console.log("Function");
+      // console.log("Function");
       const paramTypes = path.node.params.map(p => varT(p.name));
       let tempContext = state.context;
       paramTypes.forEach(param => {
@@ -231,11 +230,7 @@ export const collector = ast => {
       path.skip();
     },
     Identifier(path, state = emptyState) {
-      if (state.skip(path)) {
-        path.skip();
-        return;
-      }
-      console.log("Identifier");
+      // console.log("Identifier");
       const scheme = state.context[path.node.name];
       if (!scheme) throw "node not found in scheme";
       path.data = {
@@ -248,11 +243,7 @@ export const collector = ast => {
       };
     },
     NumericLiteral(path, state = emptyState) {
-      if (state.skip(path)) {
-        path.skip();
-        return;
-      }
-      console.log("NumericLiteral");
+      // console.log("NumericLiteral");
       path.data = {
         subst: emptySubst(),
         type: intT()
@@ -266,24 +257,4 @@ export const collector = ast => {
 
   traverse(ast, visitor);
   return nodes;
-};
-
-const constrain = (graph: Graph, vertex: Vertex): Vertex => {
-  const edges = graph.edges.filter(({ to }) => to === vertex);
-  if (edges.length === 0) {
-    return vertex;
-  }
-  // infer vertex type
-  const kind = edges.reduce(
-    (k, edge) => edge.constraint(constrain(graph, edge.from).kind, k),
-    vertex.kind
-  );
-  return { ...vertex, kind };
-};
-
-export const resolver = (graph: Graph) => {
-  return graph.vertices.reduce((g, vertex) => {
-    const updated = constrain(g, vertex);
-    return replaceVertex(g, vertex, updated);
-  }, graph);
 };
