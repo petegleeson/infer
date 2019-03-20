@@ -24,7 +24,10 @@ type VarType = { name: "var", id: string };
 export const varT = (id: string): VarType => ({ name: "var", id });
 const isVarT = (ty: Type) => ty.name === "var";
 
-type Type = IntType | BoolType | FuncType | VarType;
+type VoidType = { name: "void" };
+export const voidT = (): VoidType => ({ name: "void" });
+
+type Type = IntType | BoolType | FuncType | VarType | VoidType;
 
 type Scheme = { vars: string[], type: Type };
 const createScheme = (vars: string[], type: Type): Scheme => ({
@@ -39,7 +42,7 @@ type Substitution = { [id: string]: Type };
 const emptySubst = (): Substitution => ({});
 const deleteSubst = (subst, keys): Substitution =>
   Object.keys(subst)
-    .filter(k => keys.includes(k))
+    .filter(k => !keys.includes(k))
     .reduce((res, k) => {
       res[k] = subst[k];
       return res;
@@ -207,6 +210,19 @@ export const collector = ast => {
       };
       path.skip();
     },
+    ExpressionStatement(path, state = emptyState()) {
+      // console.log("ExpressionStatement");
+      path.traverse(visitor, {
+        ...state,
+        skip: p => p.node !== path.node.expression
+      });
+      const { subst: s1, type: tyExp } = path.get("expression").data;
+      path.data = {
+        subst: s1,
+        type: tyExp
+      };
+      path.skip();
+    },
     Function(path, state = emptyState()) {
       // console.log("Function");
       const paramTypes = path.node.params.map(p => varT(p.name));
@@ -231,7 +247,7 @@ export const collector = ast => {
       path.skip();
     },
     Identifier(path, state = emptyState()) {
-      // console.log("Identifier");
+      // console.log("Identifier", path.node.name);
       const scheme = state.context[path.node.name];
       if (!scheme) throw "node not found in scheme";
       path.data = {
@@ -253,6 +269,74 @@ export const collector = ast => {
         node: path.node,
         ...path.data
       };
+    },
+    "Program|BlockStatement"(path, state = emptyState()) {
+      // console.log("Program|BlockStatement");
+      const bindings = Object.keys(path.scope.bindings).map(varT);
+      let bodyContext = state.context;
+      bindings.forEach(tyVar => {
+        bodyContext[tyVar.id] = createScheme([], tyVar);
+      });
+      const composedSubst = path.node.body.reduce((subst, _, i) => {
+        // infer
+        path.traverse(visitor, {
+          ...state,
+          context: applySubstContext(subst, state.context),
+          skip: p => p.node !== path.node.body[i]
+        });
+        const { subst: s1 } = path.get(`body.${i}`).data;
+        return composeSubst(subst, s1);
+      }, emptySubst());
+
+      path.skip();
+    },
+    VariableDeclaration(path, state = emptyState()) {
+      // console.log("VariableDeclaration");
+      const composedSubst = path.node.declarations.reduce((subst, _, i) => {
+        // infer
+        path.traverse(visitor, {
+          ...state,
+          context: applySubstContext(subst, state.context),
+          skip: p => p.node !== path.node.declarations[i]
+        });
+        const { subst: s1 } = path.get(`declarations.${i}`).data;
+        return composeSubst(subst, s1);
+      }, emptySubst());
+
+      path.data = {
+        subst: composedSubst,
+        type: voidT()
+      };
+
+      path.skip();
+    },
+    VariableDeclarator(path, state = emptyState()) {
+      // console.log("VariableDeclarator");
+      // infer rhs
+      path.traverse(visitor, {
+        ...state,
+        skip: p => p.node === path.node.id
+      });
+      const { subst: s1, type: tyRhs } = path.get("init").data;
+      // infer lhs
+      path.traverse(visitor, {
+        ...state,
+        context: applySubstContext(s1, state.context),
+        skip: p => p.node === path.node.init
+      });
+      const { subst: s2, type: tyLhs } = path.get("id").data;
+
+      const subst = unify(applySubst(s2, tyLhs), tyRhs);
+      path.data = {
+        subst: subst,
+        type: voidT()
+      };
+      // update the type of the id node
+      nodes[getId(path.node.id)].type = applySubst(
+        subst,
+        nodes[getId(path.node.id)].type
+      );
+      path.skip();
     }
   };
 

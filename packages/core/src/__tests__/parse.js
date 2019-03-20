@@ -54,14 +54,29 @@ it("should infer multi arg function type", () => {
   });
 });
 
-it("should infer multi arg function call type", () => {
-  const code = `((x, y) => y)(1, true)`;
+it("should infer assignment", () => {
+  const code = `const f = x => x`;
   const ast = parser.parse(code);
   const graph = collector(ast);
   const res = Object.keys(graph).map(k => ({
     [graph[k].node.type]: graph[k].type
   }));
   expect(res).toContainEqual({
-    CallExpression: boolT()
+    Identifier: funcT([varT("x")], varT("x"))
+  });
+});
+
+it("should infer assignment then call expression", () => {
+  const code = `
+    const f = x => x;
+    const i = f(1);
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const res = Object.keys(graph).map(k => ({
+    [graph[k].node.type]: graph[k].type
+  }));
+  expect(res).toContainEqual({
+    Identifier: intT()
   });
 });
