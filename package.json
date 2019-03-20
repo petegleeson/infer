@@ -14,12 +14,6 @@
     "build": "cd packages/core && babel src -d dist --root-mode upward",
     "watch": "tsc -b -w"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "transform": {
-      "^.+\\.jsx?$": "babel-jest"
-    }
-  },
   "devDependencies": {
     "@babel/core": "^7.1.0",
     "@babel/preset-env": "^7.0.0-rc.1",
