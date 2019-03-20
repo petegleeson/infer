@@ -225,10 +225,13 @@ export const collector = ast => {
     },
     Function(path, state = emptyState()) {
       // console.log("Function");
-      const paramTypes = path.node.params.map(p => varT(p.name));
+      const paramTypes = path.node.params.map(p => ({
+        name: p.name,
+        type: varT(state.getVarTId())
+      }));
       let tempContext = state.context;
-      paramTypes.forEach(param => {
-        tempContext[param.id] = createScheme([], param);
+      paramTypes.forEach(({ name, type }) => {
+        tempContext[name] = createScheme([], type);
       });
       path.traverse(visitor, {
         ...state,
@@ -238,7 +241,10 @@ export const collector = ast => {
       const { subst: s1, type: bodyType } = path.get("body").data;
       path.data = {
         subst: s1,
-        type: funcT(paramTypes.map(param => applySubst(s1, param)), bodyType)
+        type: funcT(
+          paramTypes.map(({ type: tyParam }) => applySubst(s1, tyParam)),
+          bodyType
+        )
       };
       nodes[getId(path.node)] = {
         node: path.node,

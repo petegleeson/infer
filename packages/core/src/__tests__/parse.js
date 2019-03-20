@@ -11,7 +11,7 @@ it("should infer identity function type", () => {
     [graph[k].node.type]: graph[k].type
   }));
   expect(res).toContainEqual({
-    ArrowFunctionExpression: funcT([varT("x")], varT("x"))
+    ArrowFunctionExpression: funcT([varT("$1")], varT("$1"))
   });
 });
 
@@ -23,7 +23,7 @@ it("should infer arg function type", () => {
     [graph[k].node.type]: graph[k].type
   }));
   expect(res).toContainEqual({
-    ArrowFunctionExpression: funcT([funcT([boolT()], varT("$1"))], varT("$1"))
+    ArrowFunctionExpression: funcT([funcT([boolT()], varT("$2"))], varT("$2"))
   });
 });
 
@@ -38,7 +38,7 @@ it("should infer identity call type", () => {
     CallExpression: intT()
   });
   expect(res).toContainEqual({
-    ArrowFunctionExpression: funcT([varT("x")], varT("x"))
+    ArrowFunctionExpression: funcT([varT("$2")], varT("$2"))
   });
 });
 
@@ -50,7 +50,7 @@ it("should infer multi arg function type", () => {
     [graph[k].node.type]: graph[k].type
   }));
   expect(res).toContainEqual({
-    ArrowFunctionExpression: funcT([varT("x"), varT("y")], varT("y"))
+    ArrowFunctionExpression: funcT([varT("$1"), varT("$2")], varT("$2"))
   });
 });
 
@@ -62,7 +62,7 @@ it("should infer assignment", () => {
     [graph[k].node.type]: graph[k].type
   }));
   expect(res).toContainEqual({
-    Identifier: funcT([varT("x")], varT("x"))
+    Identifier: funcT([varT("$1")], varT("$1"))
   });
 });
 
