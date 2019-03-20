@@ -16,7 +16,7 @@ import {
   CompletionItemKind,
   TextDocumentPositionParams
 } from "vscode-languageserver";
-import { parse, collector, resolver, print } from "core";
+import { collector, parse, prettyPrint } from "core";
 
 // Create a connection for the server. The connection uses Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -137,8 +137,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   let text = textDocument.getText();
   let ast = parse(text);
   let graph = collector(ast);
-  let inferred = resolver(graph);
-  graphs[textDocument.uri] = inferred;
+  graphs[textDocument.uri] = graph;
 
   connection.console.log("inferred types for " + textDocument.uri);
 }
@@ -156,15 +155,15 @@ const cursorInside = (line, character, { loc }) => {
 };
 
 connection.onRequest("custom/selectionChanged", ({ uri, line, character }) => {
-  const inferred = graphs[uri];
-  if (inferred) {
-    const type = inferred.vertices
-      .filter(({ node }) => {
-        return cursorInside(line + 1, character + 1, node);
+  const nodes = graphs[uri];
+  if (nodes) {
+    const type = Object.keys(nodes)
+      .filter(id => {
+        return cursorInside(line + 1, character + 1, nodes[id].node);
       })
-      .map(({ kind }) => kind);
+      .map(id => nodes[id].type);
     if (type.length > 0) {
-      connection.sendRequest("custom/typeChanged", print(type[0]));
+      connection.sendRequest("custom/typeChanged", prettyPrint(type[0]));
     }
   }
   return null;

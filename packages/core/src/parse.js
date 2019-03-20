@@ -4,6 +4,22 @@ import * as t from "@babel/types";
 
 const toObj = obj => (res, k) => (res[k] = obj[k]);
 
+const alphabet = "abcdefghijklmnopqrstuvwxyz";
+export const prettyPrint = (ty: Type): string => {
+  if (isBoolT(ty)) {
+    return ty.name;
+  } else if (isIntT(ty)) {
+    return ty.name;
+  } else if (isVarT(ty)) {
+    return alphabet[parseInt(ty.id.split("$")[1], 10) - 1];
+  } else if (isFuncT(ty)) {
+    return `(${ty.params.map(prettyPrint).join(", ")}) => ${prettyPrint(
+      ty.returns
+    )}`;
+  }
+  throw `don't know how to print ${ty.name}`;
+};
+
 /* TYPES */
 
 type BoolType = { name: "bool" };
@@ -232,18 +248,36 @@ export const collector = ast => {
       paramTypes.forEach(({ name, type }) => {
         tempContext[name] = createScheme([], type);
       });
+      // infer body type
       path.traverse(visitor, {
         ...state,
         context: tempContext,
         skip: p => path.node.params.includes(p.node)
       });
       const { subst: s1, type: bodyType } = path.get("body").data;
+      // infer params type - potentially this should go first
+      const { subst, tyParams } = paramTypes.reduce(
+        ({ subst, tyParams }, { type: tyParam }, i) => {
+          path.traverse(visitor, {
+            ...state,
+            context: applySubstContext(subst, tempContext),
+            skip: p => p.node === path.node.body
+          });
+          const { subst: paramSubst, type: paramType } = path.get(
+            `params.${i}`
+          ).data;
+          let composedSubst = composeSubst(subst, paramSubst);
+          return {
+            subst: composeSubst,
+            tyParams: [...tyParams, applySubst(composedSubst, tyParam)]
+          };
+        },
+        { subst: s1, tyParams: [] }
+      );
+
       path.data = {
-        subst: s1,
-        type: funcT(
-          paramTypes.map(({ type: tyParam }) => applySubst(s1, tyParam)),
-          bodyType
-        )
+        subst: subst,
+        type: funcT(tyParams, bodyType)
       };
       nodes[getId(path.node)] = {
         node: path.node,
