@@ -4,6 +4,8 @@ import * as t from "@babel/types";
 
 const toObj = obj => (res, k) => (res[k] = obj[k]);
 
+/* TYPES */
+
 type BoolType = { name: "bool" };
 export const boolT = (): BoolType => ({ name: "bool" });
 const isBoolT = (ty: Type) => ty.name === "bool";
@@ -40,7 +42,7 @@ const createCtx = (): Context => ({});
 
 type Substitution = { [id: string]: Type };
 const emptySubst = (): Substitution => ({});
-const deleteSubst = (subst, keys): Substitution =>
+const deleteSubst = (subst: Substitution, keys: string[]): Substitution =>
   Object.keys(subst)
     .filter(k => !keys.includes(k))
     .reduce((res, k) => {
@@ -68,10 +70,7 @@ const applySubstScheme = (
   subst: Substitution,
   { vars, type }: Scheme
 ): Scheme => {
-  return createScheme(
-    vars,
-    applySubst(deleteSubst(subst, vars.map(v => v.id)), type)
-  );
+  return createScheme(vars, applySubst(deleteSubst(subst, vars), type));
 };
 
 const applySubstContext = (subst: Substitution, ctx: Context): Context =>
