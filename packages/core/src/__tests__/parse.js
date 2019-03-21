@@ -120,3 +120,24 @@ it("should infer object type", () => {
     Identifier: objT([["name", strT()], ["age", intT()]])
   });
 });
+
+it("should model single-arity memoize function", () => {
+  const code = `
+    const memoize = fn => a => fn(a);
+    const getOne = memoize(a => 1);
+    const n = getOne(0);
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const res = Object.keys(graph).reduce(
+    (r, k) =>
+      Object.assign(r, {
+        [graph[k].node.type === "Identifier"
+          ? graph[k].node.name
+          : graph[k].node.type]: graph[k].type
+      }),
+    {}
+  );
+  expect(res.getOne).toEqual(funcT([varT("$8")], intT()));
+  expect(res.n).toEqual(intT());
+});
