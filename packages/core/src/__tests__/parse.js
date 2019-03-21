@@ -8,7 +8,8 @@ import {
   funcT,
   intT,
   varT,
-  strT
+  strT,
+  objT
 } from "../parse";
 
 it("should infer identity function type", () => {
@@ -100,5 +101,22 @@ it("should infer string type", () => {
   }));
   expect(res).toContainEqual({
     Identifier: strT()
+  });
+});
+
+it("should infer object type", () => {
+  const code = `
+    const person = {
+      name: 'Jill',
+      age: 41
+    }
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const res = Object.keys(graph).map(k => ({
+    [graph[k].node.type]: graph[k].type
+  }));
+  expect(res).toContainEqual({
+    Identifier: objT([["name", strT()], ["age", intT()]])
   });
 });

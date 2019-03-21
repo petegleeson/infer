@@ -18,6 +18,10 @@ export const prettyPrint = (ty: Type): string => {
     return `(${ty.params.map(prettyPrint).join(", ")}) => ${prettyPrint(
       ty.returns
     )}`;
+  } else if (isObjT(ty)) {
+    return `{ ${ty.properties
+      .map(([key, tyValue]) => `${key}: ${prettyPrint(tyValue)}`)
+      .join(", ")} }`;
   }
   throw `don't know how to print ${ty.name}`;
 };
@@ -39,6 +43,13 @@ const isFuncT = (ty: Type) => ty.name === "func";
 type IntType = { name: "int" };
 export const intT = (): IntType => ({ name: "int" });
 const isIntT = (ty: Type) => ty.name === "int";
+
+type ObjType = { name: "obj", properties: [string, Type][] };
+export const objT = (properties: [string, Type][]): ObjType => ({
+  name: "obj",
+  properties
+});
+const isObjT = (ty: Type) => ty.name === "obj";
 
 type StrType = { name: "str" };
 export const strT = (): StrType => ({ name: "str" });
@@ -86,6 +97,10 @@ const applySubst = (subst: Substitution, ty: Type): Type => {
     return ty;
   } else if (isStrT(ty)) {
     return ty;
+  } else if (isObjT(ty)) {
+    return objT(
+      ty.properties.map(([name, tyProp]) => [name, applySubst(subst, tyProp)])
+    );
   }
   throw `cannot apply substution to ${ty.name}`;
 };
@@ -338,6 +353,66 @@ export const collector = ast => {
         const { subst: s1 } = path.get(`body.${i}`).data;
         return composeSubst(subst, s1);
       }, emptySubst());
+
+      path.skip();
+    },
+    ObjectExpression(path, state = emptyState()) {
+      const obj = path.node.properties.reduce(
+        ({ subst, type }, prop, i) => {
+          path.traverse(visitor, {
+            ...state,
+            context: applySubstContext(subst, state.context),
+            skip: p => p.node !== prop
+          });
+          const { subst: objSubst, type: tyObj } = path.get(
+            `properties.${i}`
+          ).data;
+          const [[key, tyValue]] = tyObj.properties;
+          let composedSubst = composeSubst(subst, objSubst);
+          // merge each obj prop type into this obj type
+          return {
+            subst: composeSubst,
+            type: objT([...type.properties, [key, tyValue]])
+          };
+        },
+        { subst: emptySubst(), type: objT([]) }
+      );
+
+      path.data = {
+        subst: obj.subst,
+        type: obj.type
+      };
+
+      path.skip();
+    },
+    ObjectProperty(path, state = emptyState()) {
+      // infer value
+      path.traverse(visitor, {
+        ...state,
+        skip: p => p.node === path.node.key
+      });
+      const { subst: valSubst, type: tyVal } = path.get("value").data;
+      // infer key
+      path.traverse(visitor, {
+        ...state,
+        context: applySubstContext(
+          valSubst,
+          Object.assign(state.context, {
+            [path.node.key.name]: createScheme([], varT(state.getVarTId()))
+          })
+        ),
+        skip: p => p.node === path.node.value
+      });
+      const { subst: keySubst, type: tyKey } = path.get("key").data;
+
+      const subst = unify(applySubst(keySubst, tyKey), tyVal);
+
+      path.data = {
+        subst: subst,
+        type: objT([[path.node.key.name, applySubst(subst, tyKey)]])
+      };
+
+      nodes[getId(path.node.key)].type = applySubst(subst, tyKey);
 
       path.skip();
     },
