@@ -191,10 +191,13 @@ const getId = node =>
     node.loc.end.column
   }`;
 
-const pathData = (subst: Substitution, type: Type) => ({
-  subst,
-  type
-});
+const pathData = (subst: Substitution, type: Type) => {
+  if (typeof subst !== "object") throw `subst is not an object`;
+  return {
+    subst,
+    type
+  };
+};
 
 const emptyState = () => ({
   context: createCtx(),
