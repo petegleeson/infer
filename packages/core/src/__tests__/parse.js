@@ -70,7 +70,7 @@ it("should infer assignment", () => {
     [graph[k].node.type]: graph[k].type
   }));
   expect(res).toContainEqual({
-    Identifier: funcT([varT("$1")], varT("$1"))
+    Identifier: funcT([varT("$2")], varT("$2"))
   });
 });
 

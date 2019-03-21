@@ -321,16 +321,18 @@ export const collector = ast => {
     },
     "Program|BlockStatement"(path, state = emptyState()) {
       // console.log("Program|BlockStatement");
-      const bindings = Object.keys(path.scope.bindings).map(varT);
-      let bodyContext = state.context;
-      bindings.forEach(tyVar => {
-        bodyContext[tyVar.id] = createScheme([], tyVar);
-      });
+      const bodyContext = Object.keys(path.scope.bindings).reduce(
+        (ctx, binding) => {
+          ctx[binding] = createScheme([], varT(state.getVarTId()));
+          return ctx;
+        },
+        state.context
+      );
       const composedSubst = path.node.body.reduce((subst, _, i) => {
         // infer
         path.traverse(visitor, {
           ...state,
-          context: applySubstContext(subst, state.context),
+          context: applySubstContext(subst, bodyContext),
           skip: p => p.node !== path.node.body[i]
         });
         const { subst: s1 } = path.get(`body.${i}`).data;
