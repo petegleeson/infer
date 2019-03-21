@@ -159,7 +159,7 @@ connection.onRequest("custom/selectionChanged", ({ uri, line, character }) => {
   if (nodes) {
     const type = Object.keys(nodes)
       .filter(id => {
-        return cursorInside(line + 1, character + 1, nodes[id].node);
+        return cursorInside(line + 1, character, nodes[id].node);
       })
       .map(id => nodes[id].type);
     if (type.length > 0) {
