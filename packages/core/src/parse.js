@@ -10,6 +10,8 @@ export const prettyPrint = (ty: Type): string => {
     return ty.name;
   } else if (isIntT(ty)) {
     return ty.name;
+  } else if (isStrT(ty)) {
+    return ty.name;
   } else if (isVarT(ty)) {
     return alphabet[parseInt(ty.id.split("$")[1], 10) - 1];
   } else if (isFuncT(ty)) {
@@ -38,6 +40,10 @@ type IntType = { name: "int" };
 export const intT = (): IntType => ({ name: "int" });
 const isIntT = (ty: Type) => ty.name === "int";
 
+type StrType = { name: "str" };
+export const strT = (): StrType => ({ name: "str" });
+const isStrT = (ty: Type) => ty.name === "str";
+
 type VarType = { name: "var", id: string };
 export const varT = (id: string): VarType => ({ name: "var", id });
 const isVarT = (ty: Type) => ty.name === "var";
@@ -45,7 +51,7 @@ const isVarT = (ty: Type) => ty.name === "var";
 type VoidType = { name: "void" };
 export const voidT = (): VoidType => ({ name: "void" });
 
-type Type = IntType | BoolType | FuncType | VarType | VoidType;
+type Type = IntType | BoolType | FuncType | VarType | VoidType | StrType;
 
 type Scheme = { vars: string[], type: Type };
 const createScheme = (vars: string[], type: Type): Scheme => ({
@@ -78,8 +84,10 @@ const applySubst = (subst: Substitution, ty: Type): Type => {
     return ty;
   } else if (isIntT(ty)) {
     return ty;
+  } else if (isStrT(ty)) {
+    return ty;
   }
-  throw ty;
+  throw `cannot apply substution to ${ty.name}`;
 };
 
 const applySubstScheme = (
@@ -134,6 +142,8 @@ const unify = (ty1: Type, ty2: Type): Substitution => {
   if (isIntT(ty1) && isIntT(ty2)) {
     return emptySubst();
   } else if (isBoolT(ty1) && isBoolT(ty2)) {
+    return emptySubst();
+  } else if (isStrT(ty1) && isStrT(ty2)) {
     return emptySubst();
   } else if (
     isFuncT(ty1) &&
@@ -328,6 +338,16 @@ export const collector = ast => {
       }, emptySubst());
 
       path.skip();
+    },
+    StringLiteral(path, state = emptyState()) {
+      path.data = {
+        subst: emptySubst(),
+        type: strT()
+      };
+      nodes[getId(path.node)] = {
+        node: path.node,
+        ...path.data
+      };
     },
     VariableDeclaration(path, state = emptyState()) {
       // console.log("VariableDeclaration");

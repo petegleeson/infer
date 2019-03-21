@@ -1,7 +1,15 @@
 // @flow
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
-import { collector, prettyPrint, boolT, funcT, intT, varT } from "../parse";
+import {
+  collector,
+  prettyPrint,
+  boolT,
+  funcT,
+  intT,
+  varT,
+  strT
+} from "../parse";
 
 it("should infer identity function type", () => {
   const code = `x => x`;
@@ -78,5 +86,19 @@ it("should infer assignment then call expression", () => {
   }));
   expect(res).toContainEqual({
     Identifier: intT()
+  });
+});
+
+it("should infer string type", () => {
+  const code = `
+    const greeting = "hi";
+  `;
+  const ast = parser.parse(code);
+  const graph = collector(ast);
+  const res = Object.keys(graph).map(k => ({
+    [graph[k].node.type]: graph[k].type
+  }));
+  expect(res).toContainEqual({
+    Identifier: strT()
   });
 });
