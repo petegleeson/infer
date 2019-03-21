@@ -12,6 +12,17 @@ import {
   objT
 } from "../parse";
 
+const collectIds = graph =>
+  Object.keys(graph).reduce(
+    (r, k) =>
+      graph[k].node.type === "Identifier"
+        ? Object.assign(r, {
+            [graph[k].node.name]: graph[k].type
+          })
+        : r,
+    {}
+  );
+
 it("should infer identity function type", () => {
   const code = `x => x`;
   const ast = parser.parse(code);
@@ -67,12 +78,8 @@ it("should infer assignment", () => {
   const code = `const f = x => x`;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
-  }));
-  expect(res).toContainEqual({
-    Identifier: funcT([varT("$2")], varT("$2"))
-  });
+  const ids = collectIds(graph);
+  expect(ids.f).toEqual(funcT([varT("$2")], varT("$2")));
 });
 
 it("should infer assignment then call expression", () => {
@@ -82,12 +89,8 @@ it("should infer assignment then call expression", () => {
   `;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
-  }));
-  expect(res).toContainEqual({
-    Identifier: intT()
-  });
+  const ids = collectIds(graph);
+  expect(ids.i).toEqual(intT());
 });
 
 it("should infer string type", () => {
@@ -96,12 +99,8 @@ it("should infer string type", () => {
   `;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
-  }));
-  expect(res).toContainEqual({
-    Identifier: strT()
-  });
+  const ids = collectIds(graph);
+  expect(ids.greeting).toEqual(strT());
 });
 
 it("should infer object type", () => {
@@ -113,12 +112,8 @@ it("should infer object type", () => {
   `;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
-  }));
-  expect(res).toContainEqual({
-    Identifier: objT([["name", strT()], ["age", intT()]])
-  });
+  const ids = collectIds(graph);
+  expect(ids.person).toEqual(objT([["name", strT()], ["age", intT()]]));
 });
 
 it("should model single-arity memoize function", () => {
@@ -129,15 +124,7 @@ it("should model single-arity memoize function", () => {
   `;
   const ast = parser.parse(code);
   const graph = collector(ast);
-  const res = Object.keys(graph).reduce(
-    (r, k) =>
-      Object.assign(r, {
-        [graph[k].node.type === "Identifier"
-          ? graph[k].node.name
-          : graph[k].node.type]: graph[k].type
-      }),
-    {}
-  );
-  expect(res.getOne).toEqual(funcT([varT("$8")], intT()));
-  expect(res.n).toEqual(intT());
+  const ids = collectIds(graph);
+  expect(ids.getOne).toEqual(funcT([varT("$8")], intT()));
+  expect(ids.n).toEqual(intT());
 });
