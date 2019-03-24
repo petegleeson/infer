@@ -2,7 +2,7 @@
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
 import {
-  collector,
+  visitor,
   prettyPrint,
   boolT,
   funcT,
@@ -11,6 +11,7 @@ import {
   strT,
   objT
 } from "../parse";
+import traversal from "../traverse";
 
 const collectIds = graph =>
   Object.keys(graph).reduce(
@@ -26,10 +27,10 @@ const collectIds = graph =>
 it("should infer identity function type", () => {
   const code = `x => x`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
-  }));
+  const traverse = traversal(visitor, ast);
+  const res = traverse((curr, { type, node }) => {
+    return curr.concat([{ [node.type]: type }]);
+  }, []);
   expect(res).toContainEqual({
     ArrowFunctionExpression: funcT([varT("$1")], varT("$1"))
   });
@@ -38,10 +39,10 @@ it("should infer identity function type", () => {
 it("should infer arg function type", () => {
   const code = `x => x(true)`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
-  }));
+  const traverse = traversal(visitor, ast);
+  const res = traverse((curr, { type, node }) => {
+    return curr.concat([{ [node.type]: type }]);
+  }, []);
   expect(res).toContainEqual({
     ArrowFunctionExpression: funcT([funcT([boolT()], varT("$2"))], varT("$2"))
   });

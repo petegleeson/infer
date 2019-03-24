@@ -1,7 +1,4 @@
 // @flow
-import traverse from "@babel/traverse";
-import * as t from "@babel/types";
-
 const toObj = obj => (res, k) => (res[k] = obj[k]);
 
 const alphabet = "abcdefghijklmnopqrstuvwxyz";
@@ -62,7 +59,7 @@ const isVarT = (ty: Type) => ty.name === "var";
 type VoidType = { name: "void" };
 export const voidT = (): VoidType => ({ name: "void" });
 
-type Type =
+export type Type =
   | IntType
   | BoolType
   | FuncType
@@ -77,11 +74,11 @@ const createScheme = (vars: string[], type: Type): Scheme => ({
   type
 });
 
-type Context = { [id: string]: Scheme };
-const createCtx = (): Context => ({});
+export type Context = { [id: string]: Scheme };
+export const createCtx = (): Context => ({});
 
-type Substitution = { [id: string]: Type };
-const emptySubst = (): Substitution => ({});
+export type Substitution = { [id: string]: Type };
+export const emptySubst = (): Substitution => ({});
 const deleteSubst = (subst: Substitution, keys: string[]): Substitution =>
   Object.keys(subst)
     .filter(k => !keys.includes(k))
@@ -199,268 +196,214 @@ const pathData = (subst: Substitution, type: Type) => {
   };
 };
 
-const emptyState = () => ({
-  context: createCtx(),
-  getVarTId: (() => {
-    let id = 0;
-    return () => `$${++id}`;
-  })(),
-  skip: p => false
-});
+export type VisitResult = {
+  subst: Substitution,
+  type: Type
+};
 
-export const collector = ast => {
-  let nodes = {};
-  const visitor = {
-    enter(path, state = emptyState()) {
-      if (state.skip(path)) {
-        path.skip();
-        return;
-      }
-    },
-    BooleanLiteral(path, state = emptyState()) {
-      path.data = pathData(emptySubst(), boolT());
-      nodes[getId(path.node)] = {
-        node: path.node,
-        ...path.data
-      };
-    },
-    CallExpression(path, state = emptyState()) {
-      // console.log("CallExpression");
-      const tyRes = varT(state.getVarTId());
+type Obj = { [k: string]: any };
 
-      path.traverse(visitor, {
-        ...state,
-        skip: p => path.node.arguments.includes(p.node)
-      });
-      const { subst: s1, type: tyFun } = path.get("callee").data;
+export type VisitorApi = {
+  visit: (Obj, Context) => VisitResult,
+  getVarTId: () => string
+};
 
-      path.traverse(visitor, {
-        ...state,
-        context: applySubstContext(s1, state.context),
-        skip: p => p.node === path.node.callee
-      });
+export type Visitor = {
+  [k: string]: (
+    path: { node: Obj },
+    context: Context,
+    api: VisitorApi
+  ) => VisitResult
+};
 
-      const tyArgs = path.get("arguments").map(arg => arg.data);
-      const s2 = tyArgs.reduce((s, { subst }) => {
-        return composeSubst(s, subst);
-      }, emptySubst());
+export const visitor: Visitor = {
+  BooleanLiteral(path, state) {
+    return pathData(emptySubst(), boolT());
+  },
+  CallExpression(path, context, { visit, getVarTId }) {
+    // console.log("CallExpression");
+    const tyRes = varT(getVarTId());
 
-      const s3 = unify(
-        applySubst(s2, tyFun),
-        funcT(tyArgs.map(a => a.type), tyRes)
+    const { subst: s1, type: tyFun } = visit(path.node.callee, context);
+    const args = path.node.arguments.map(n => visit(n, context));
+
+    const tyArgs = args.map(a => a.type);
+    const s2 = args.reduce((s, { subst }) => {
+      return composeSubst(s, subst);
+    }, emptySubst());
+
+    const s3 = unify(applySubst(s2, tyFun), funcT(tyArgs, tyRes));
+
+    const subst = composeSubst(s3, composeSubst(s2, s1));
+
+    return pathData(subst, applySubst(subst, tyRes));
+  },
+  ExpressionStatement(path, state, { visit }) {
+    // console.log("ExpressionStatement");
+    return visit(path.node.expression, state);
+  },
+  Function(path, context, { visit, getVarTId }) {
+    // console.log("Function");
+    // add params to context
+    const funcContext = path.node.params.reduce(
+      (ctx, n) =>
+        Object.assign(ctx, { [n.name]: createScheme([], varT(getVarTId())) }),
+      context
+    );
+    // infer params type
+    let paramSubst = emptySubst();
+    const paramTypes = path.node.params.map(n => {
+      const { subst, type } = visit(
+        n,
+        applySubstContext(paramSubst, funcContext)
       );
+      paramSubst = composeSubst(paramSubst, subst);
+      return type;
+    });
+    // infer body type
+    const { subst: bodySubst, type: bodyType } = visit(
+      path.node.body,
+      funcContext
+    );
 
-      const subst = composeSubst(s3, composeSubst(s2, s1));
+    // unify param and body substitutions
+    const composedSubst = unify(
+      applySubst(paramSubst, funcT(paramTypes, bodyType)),
+      applySubst(bodySubst, funcT(paramTypes, bodyType))
+    );
+    console.log(applySubst(composedSubst, funcT(paramTypes, bodyType)));
 
-      path.data = pathData(subst, applySubst(subst, tyRes));
-      nodes[getId(path.node)] = {
-        node: path.node,
-        ...path.data
-      };
-      path.skip();
-    },
-    ExpressionStatement(path, state = emptyState()) {
-      // console.log("ExpressionStatement");
-      path.traverse(visitor, {
-        ...state,
-        skip: p => p.node !== path.node.expression
-      });
-      const { subst: s1, type: tyExp } = path.get("expression").data;
-      path.data = pathData(s1, tyExp);
-      path.skip();
-    },
-    Function(path, state = emptyState()) {
-      // console.log("Function");
-      const paramTypes = path.node.params.map(p => ({
-        name: p.name,
-        type: varT(state.getVarTId())
-      }));
-      let tempContext = state.context;
-      paramTypes.forEach(({ name, type }) => {
-        tempContext[name] = createScheme([], type);
-      });
-      // infer body type
-      path.traverse(visitor, {
-        ...state,
-        context: tempContext,
-        skip: p => path.node.params.includes(p.node)
-      });
-      const { subst: s1, type: bodyType } = path.get("body").data;
-      // infer params type - potentially this should go first
-      const { subst, tyParams } = paramTypes.reduce(
-        ({ subst, tyParams }, { type: tyParam }, i) => {
-          path.traverse(visitor, {
-            ...state,
-            context: applySubstContext(subst, tempContext),
-            skip: p => p.node === path.node.body
-          });
-          const { subst: paramSubst, type: paramType } = path.get(
-            `params.${i}`
-          ).data;
-          // console.log("current subst", subst);
-          // console.log("param subst", paramSubst);
-          let composedSubst = composeSubst(subst, paramSubst);
-          // console.log("composedSubst", composedSubst);
-          return {
-            subst: composedSubst,
-            tyParams: [...tyParams, applySubst(composedSubst, tyParam)]
-          };
-        },
-        { subst: s1, tyParams: [] }
-      );
-
-      path.data = pathData(subst, funcT(tyParams, bodyType));
-      nodes[getId(path.node)] = {
-        node: path.node,
-        ...path.data
-      };
-      path.skip();
-    },
-    Identifier(path, state = emptyState()) {
-      // console.log("Identifier", path.node.name);
-      const scheme = state.context[path.node.name];
-      if (!scheme) throw `${path.node.name} not found in scheme`;
-      path.data = pathData(emptySubst(), instantiate(scheme));
-      nodes[getId(path.node)] = {
-        node: path.node,
-        ...path.data
-      };
-    },
-    NumericLiteral(path, state = emptyState()) {
-      // console.log("NumericLiteral");
-      path.data = pathData(emptySubst(), intT());
-      nodes[getId(path.node)] = {
-        node: path.node,
-        ...path.data
-      };
-    },
-    "Program|BlockStatement"(path, state = emptyState()) {
-      // console.log("Program|BlockStatement");
-      const bodyContext = Object.keys(path.scope.bindings).reduce(
-        (ctx, binding) => {
-          ctx[binding] = createScheme([], varT(state.getVarTId()));
-          return ctx;
-        },
-        state.context
-      );
-      const composedSubst = path.node.body.reduce((subst, _, i) => {
-        // infer
-        path.traverse(visitor, {
-          ...state,
-          context: applySubstContext(subst, bodyContext),
-          skip: p => p.node !== path.node.body[i]
-        });
-        const { subst: s1 } = path.get(`body.${i}`).data;
-        return composeSubst(subst, s1);
-      }, emptySubst());
-
-      path.data = pathData(composedSubst, voidT());
-      path.skip();
-    },
-    ObjectExpression(path, state = emptyState()) {
-      const obj = path.node.properties.reduce(
-        ({ subst, type }, prop, i) => {
-          path.traverse(visitor, {
-            ...state,
-            context: applySubstContext(subst, state.context),
-            skip: p => p.node !== prop
-          });
-          const { subst: objSubst, type: tyObj } = path.get(
-            `properties.${i}`
-          ).data;
-          const [[key, tyValue]] = tyObj.properties;
-          let composedSubst = composeSubst(subst, objSubst);
-          // merge each obj prop type into this obj type
-          return {
-            subst: composedSubst,
-            type: objT([...type.properties, [key, tyValue]])
-          };
-        },
-        { subst: emptySubst(), type: objT([]) }
-      );
-
-      path.data = pathData(obj.subst, obj.type);
-      path.skip();
-    },
-    ObjectProperty(path, state = emptyState()) {
-      // infer value
-      path.traverse(visitor, {
-        ...state,
-        skip: p => p.node === path.node.key
-      });
-      const { subst: valSubst, type: tyVal } = path.get("value").data;
-      // infer key
-      path.traverse(visitor, {
-        ...state,
-        context: applySubstContext(
-          valSubst,
-          Object.assign(state.context, {
-            [path.node.key.name]: createScheme([], varT(state.getVarTId()))
-          })
-        ),
-        skip: p => p.node === path.node.value
-      });
-      const { subst: keySubst, type: tyKey } = path.get("key").data;
-
-      const subst = unify(applySubst(keySubst, tyKey), tyVal);
-
-      path.data = pathData(
+    return pathData(
+      composedSubst,
+      applySubst(composedSubst, funcT(paramTypes, bodyType))
+    );
+  },
+  Identifier(path, context) {
+    // console.log("Identifier", path.node.name);
+    const scheme = context[path.node.name];
+    if (!scheme) throw `${path.node.name} not found in scheme`;
+    return pathData(emptySubst(), instantiate(scheme));
+  },
+  NumericLiteral(path, context) {
+    // console.log("NumericLiteral");
+    return pathData(emptySubst(), intT());
+  },
+  "Program|BlockStatement"(path, context, { visit, getVarTId }) {
+    // console.log("Program|BlockStatement");
+    const bodyContext = Object.keys({}).reduce((ctx, binding) => {
+      ctx[binding] = createScheme([], varT(getVarTId()));
+      return ctx;
+    }, context);
+    const composedSubst = path.node.body.reduce((subst, node, i) => {
+      // infer
+      return composeSubst(
         subst,
-        objT([[path.node.key.name, applySubst(subst, tyKey)]])
+        visit(node, applySubstContext(subst, bodyContext)).subst
       );
-      nodes[getId(path.node.key)].type = applySubst(subst, tyKey);
-      path.skip();
-    },
-    StringLiteral(path, state = emptyState()) {
-      path.data = pathData(emptySubst(), strT());
-      nodes[getId(path.node)] = {
-        node: path.node,
-        ...path.data
-      };
-    },
-    VariableDeclaration(path, state = emptyState()) {
-      // console.log("VariableDeclaration");
-      const composedSubst = path.node.declarations.reduce((subst, _, i) => {
-        // infer
+    }, emptySubst());
+
+    return pathData(composedSubst, voidT());
+  },
+  ObjectExpression(path, state = emptyState()) {
+    const obj = path.node.properties.reduce(
+      ({ subst, type }, prop, i) => {
         path.traverse(visitor, {
           ...state,
           context: applySubstContext(subst, state.context),
-          skip: p => p.node !== path.node.declarations[i]
+          skip: p => p.node !== prop
         });
-        const { subst: s1 } = path.get(`declarations.${i}`).data;
-        return composeSubst(subst, s1);
-      }, emptySubst());
+        const { subst: objSubst, type: tyObj } = path.get(
+          `properties.${i}`
+        ).data;
+        const [[key, tyValue]] = tyObj.properties;
+        let composedSubst = composeSubst(subst, objSubst);
+        // merge each obj prop type into this obj type
+        return {
+          subst: composedSubst,
+          type: objT([...type.properties, [key, tyValue]])
+        };
+      },
+      { subst: emptySubst(), type: objT([]) }
+    );
 
-      path.data = pathData(composedSubst, voidT());
-      path.skip();
-    },
-    VariableDeclarator(path, state = emptyState()) {
-      // console.log("VariableDeclarator");
-      // infer rhs
+    path.data = pathData(obj.subst, obj.type);
+    path.skip();
+  },
+  ObjectProperty(path, state = emptyState()) {
+    // infer value
+    path.traverse(visitor, {
+      ...state,
+      skip: p => p.node === path.node.key
+    });
+    const { subst: valSubst, type: tyVal } = path.get("value").data;
+    // infer key
+    path.traverse(visitor, {
+      ...state,
+      context: applySubstContext(
+        valSubst,
+        Object.assign(state.context, {
+          [path.node.key.name]: createScheme([], varT(state.getVarTId()))
+        })
+      ),
+      skip: p => p.node === path.node.value
+    });
+    const { subst: keySubst, type: tyKey } = path.get("key").data;
+
+    const subst = unify(applySubst(keySubst, tyKey), tyVal);
+
+    path.data = pathData(
+      subst,
+      objT([[path.node.key.name, applySubst(subst, tyKey)]])
+    );
+    nodes[getId(path.node.key)].type = applySubst(subst, tyKey);
+    path.skip();
+  },
+  StringLiteral(path, state = emptyState()) {
+    path.data = pathData(emptySubst(), strT());
+    nodes[getId(path.node)] = {
+      node: path.node,
+      ...path.data
+    };
+  },
+  VariableDeclaration(path, state = emptyState()) {
+    // console.log("VariableDeclaration");
+    const composedSubst = path.node.declarations.reduce((subst, _, i) => {
+      // infer
       path.traverse(visitor, {
         ...state,
-        skip: p => p.node === path.node.id
+        context: applySubstContext(subst, state.context),
+        skip: p => p.node !== path.node.declarations[i]
       });
-      const { subst: s1, type: tyRhs } = path.get("init").data;
-      // infer lhs
-      path.traverse(visitor, {
-        ...state,
-        context: applySubstContext(s1, state.context),
-        skip: p => p.node === path.node.init
-      });
-      const { subst: s2, type: tyLhs } = path.get("id").data;
+      const { subst: s1 } = path.get(`declarations.${i}`).data;
+      return composeSubst(subst, s1);
+    }, emptySubst());
 
-      const subst = unify(applySubst(s2, tyLhs), tyRhs);
-      path.data = pathData(subst, voidT());
-      // update the type of the id node
-      nodes[getId(path.node.id)].type = applySubst(
-        subst,
-        nodes[getId(path.node.id)].type
-      );
-      path.skip();
-    }
-  };
+    path.data = pathData(composedSubst, voidT());
+    path.skip();
+  },
+  VariableDeclarator(path, state = emptyState()) {
+    // console.log("VariableDeclarator");
+    // infer rhs
+    path.traverse(visitor, {
+      ...state,
+      skip: p => p.node === path.node.id
+    });
+    const { subst: s1, type: tyRhs } = path.get("init").data;
+    // infer lhs
+    path.traverse(visitor, {
+      ...state,
+      context: applySubstContext(s1, state.context),
+      skip: p => p.node === path.node.init
+    });
+    const { subst: s2, type: tyLhs } = path.get("id").data;
 
-  traverse(ast, visitor);
-  return nodes;
+    const subst = unify(applySubst(s2, tyLhs), tyRhs);
+    path.data = pathData(subst, voidT());
+    // update the type of the id node
+    nodes[getId(path.node.id)].type = applySubst(
+      subst,
+      nodes[getId(path.node.id)].type
+    );
+    path.skip();
+  }
 };
