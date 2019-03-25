@@ -1,19 +1,16 @@
 // @flow
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
-import { collector, prettyPrint } from "../parse";
+import { visitor, prettyPrint } from "../parse";
+import traversal from "../traversal";
 import { getTypes } from "../types";
 
-const collectIds = graph =>
-  Object.keys(graph).reduce(
-    (r, k) =>
-      graph[k].node.type === "Identifier"
-        ? Object.assign(r, {
-            [graph[k].node.name]: prettyPrint(graph[k].type)
-          })
-        : r,
-    {}
-  );
+const collectIds = (r, { path, type }) =>
+  path.node.type === "Identifier"
+    ? Object.assign(r, {
+        [path.node.name]: prettyPrint(type)
+      })
+    : r;
 
 const nextId = () => {
   let id = 0;
@@ -25,11 +22,10 @@ const { boolT, funcT, intT, varT, strT, objT, voidT } = getTypes(nextId());
 it("should infer identity function type", () => {
   const code = `x => x`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const res = Object.keys(graph).reduce(
-    (curr, k) =>
+  const res = traversal(visitor, ast, nextId())(
+    (curr, { path, type }) =>
       Object.assign(curr, {
-        [graph[k].node.type]: prettyPrint(graph[k].type)
+        [path.node.type]: prettyPrint(type)
       }),
     {}
   );
@@ -89,8 +85,7 @@ it("should infer multi arg function type", () => {
 it("should infer assignment", () => {
   const code = `const f = x => x`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const ids = collectIds(graph);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
   const x = varT();
   expect(ids.f).toEqual(prettyPrint(funcT([x], x)));
 });

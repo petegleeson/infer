@@ -39,6 +39,7 @@ export const isVarT = (ty: Type) => ty.name === "var";
 
 type VoidType = { uid: string, name: "void" };
 export const voidT = (uid: string): VoidType => ({ name: "void", uid });
+export const isVoidT = (ty: Type) => ty.name === "void";
 
 export type Type =
   | IntType
