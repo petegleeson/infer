@@ -1,81 +1,50 @@
 // @flow
 import traverse from "@babel/traverse";
 import * as t from "@babel/types";
+import {
+  isBoolT,
+  isIntT,
+  isStrT,
+  isVarT,
+  isFuncT,
+  isObjT,
+  getTypes,
+  funcT,
+  objT,
+  varT,
+  type Type
+} from "./types";
 
 const toObj = obj => (res, k) => (res[k] = obj[k]);
 
 const alphabet = "abcdefghijklmnopqrstuvwxyz";
-export const prettyPrint = (ty: Type): string => {
-  if (isBoolT(ty)) {
-    return ty.name;
-  } else if (isIntT(ty)) {
-    return ty.name;
-  } else if (isStrT(ty)) {
-    return ty.name;
-  } else if (isVarT(ty)) {
-    return alphabet[parseInt(ty.id.split("$")[1], 10) - 1];
-  } else if (isFuncT(ty)) {
-    return `(${ty.params.map(prettyPrint).join(", ")}) => ${prettyPrint(
-      ty.returns
-    )}`;
-  } else if (isObjT(ty)) {
-    return `{ ${ty.properties
-      .map(([key, tyValue]) => `${key}: ${prettyPrint(tyValue)}`)
-      .join(", ")} }`;
-  }
-  throw `don't know how to print ${ty.name}`;
+export const prettyPrint = (type: Type): string => {
+  let nextLetter = 0;
+  let varLetterMap = {};
+  const print = (ty: Type) => {
+    if (isBoolT(ty)) {
+      return ty.name;
+    } else if (isIntT(ty)) {
+      return ty.name;
+    } else if (isStrT(ty)) {
+      return ty.name;
+    } else if (isVarT(ty)) {
+      if (!varLetterMap[ty.uid]) {
+        varLetterMap[ty.uid] = alphabet[nextLetter];
+        nextLetter = (nextLetter + 1) % alphabet.length;
+      }
+      return varLetterMap[ty.uid];
+    } else if (isFuncT(ty)) {
+      return `(${ty.params.map(print).join(", ")}) => ${print(ty.returns)}`;
+    } else if (isObjT(ty)) {
+      return `{ ${ty.properties
+        .map(([key, tyValue]) => `${key}: ${prettyPrint(tyValue)}`)
+        .join(", ")} }`;
+    }
+    throw `don't know how to print ${ty.name}`;
+  };
+  return print(type);
 };
-
-/* TYPES */
-
-type BoolType = { uid: string, name: "bool" };
-export const boolT = (uid: string): BoolType => ({ name: "bool", uid });
-const isBoolT = (ty: Type) => ty.name === "bool";
-
-type FuncType = { uid: string, name: "func", params: Type[], returns: Type };
-export const funcT = (
-  uid: string,
-  params: Type[],
-  returns: Type
-): FuncType => ({
-  name: "func",
-  uid,
-  params,
-  returns
-});
-const isFuncT = (ty: Type) => ty.name === "func";
-
-type IntType = { uid: string, name: "int" };
-export const intT = (uid: string): IntType => ({ name: "int", uid });
-const isIntT = (ty: Type) => ty.name === "int";
-
-type ObjType = { uid: string, name: "obj", properties: [string, Type][] };
-export const objT = (uid: string, properties: [string, Type][]): ObjType => ({
-  name: "obj",
-  uid,
-  properties
-});
-const isObjT = (ty: Type) => ty.name === "obj";
-
-type StrType = { uid: string, name: "str" };
-export const strT = (uid: string): StrType => ({ name: "str", uid });
-const isStrT = (ty: Type) => ty.name === "str";
-
-type VarType = { uid: string, name: "var" };
-export const varT = (uid: string): VarType => ({ name: "var", uid });
-const isVarT = (ty: Type) => ty.name === "var";
-
-type VoidType = { uid: string, name: "void" };
-export const voidT = (uid: string): VoidType => ({ name: "void", uid });
-
-type Type =
-  | IntType
-  | BoolType
-  | FuncType
-  | ObjType
-  | VarType
-  | VoidType
-  | StrType;
 
 type Scheme = { vars: string[], type: Type };
 const createScheme = (vars: string[], type: Type): Scheme => ({
@@ -215,15 +184,7 @@ const emptyState = () => {
   })();
   return {
     context: createCtx(),
-    types: {
-      boolT: (...args) => boolT(nextId(), ...args),
-      intT: (...args) => intT(nextId(), ...args),
-      funcT: (...args) => funcT(nextId(), ...args),
-      objT: (...args) => objT(nextId(), ...args),
-      strT: (...args) => strT(nextId(), ...args),
-      varT: (...args) => varT(nextId(), ...args),
-      voidT: (...args) => voidT(nextId(), ...args)
-    },
+    types: getTypes(nextId),
     skip: p => false
   };
 };
