@@ -28,7 +28,7 @@ it("should infer identity function type", () => {
   const ast = parser.parse(code);
   const graph = collector(ast);
   const res = Object.keys(graph).map(k => ({
-    [graph[k].node.type]: graph[k].type
+    [graph[k].node.type]: prettyPrint(graph[k].type)
   }));
   expect(res).toContainEqual({
     ArrowFunctionExpression: funcT([varT("$1")], varT("$1"))

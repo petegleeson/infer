@@ -28,39 +28,45 @@ export const prettyPrint = (ty: Type): string => {
 
 /* TYPES */
 
-type BoolType = { name: "bool" };
-export const boolT = (): BoolType => ({ name: "bool" });
+type BoolType = { uid: string, name: "bool" };
+export const boolT = (uid: string): BoolType => ({ name: "bool", uid });
 const isBoolT = (ty: Type) => ty.name === "bool";
 
-type FuncType = { name: "func", params: Type[], returns: Type };
-export const funcT = (params: Type[], returns: Type): FuncType => ({
+type FuncType = { uid: string, name: "func", params: Type[], returns: Type };
+export const funcT = (
+  uid: string,
+  params: Type[],
+  returns: Type
+): FuncType => ({
   name: "func",
+  uid,
   params,
   returns
 });
 const isFuncT = (ty: Type) => ty.name === "func";
 
-type IntType = { name: "int" };
-export const intT = (): IntType => ({ name: "int" });
+type IntType = { uid: string, name: "int" };
+export const intT = (uid: string): IntType => ({ name: "int", uid });
 const isIntT = (ty: Type) => ty.name === "int";
 
-type ObjType = { name: "obj", properties: [string, Type][] };
-export const objT = (properties: [string, Type][]): ObjType => ({
+type ObjType = { uid: string, name: "obj", properties: [string, Type][] };
+export const objT = (uid: string, properties: [string, Type][]): ObjType => ({
   name: "obj",
+  uid,
   properties
 });
 const isObjT = (ty: Type) => ty.name === "obj";
 
-type StrType = { name: "str" };
-export const strT = (): StrType => ({ name: "str" });
+type StrType = { uid: string, name: "str" };
+export const strT = (uid: string): StrType => ({ name: "str", uid });
 const isStrT = (ty: Type) => ty.name === "str";
 
-type VarType = { name: "var", id: string };
-export const varT = (id: string): VarType => ({ name: "var", id });
+type VarType = { uid: string, name: "var" };
+export const varT = (uid: string): VarType => ({ name: "var", uid });
 const isVarT = (ty: Type) => ty.name === "var";
 
-type VoidType = { name: "void" };
-export const voidT = (): VoidType => ({ name: "void" });
+type VoidType = { uid: string, name: "void" };
+export const voidT = (uid: string): VoidType => ({ name: "void", uid });
 
 type Type =
   | IntType
@@ -92,9 +98,10 @@ const deleteSubst = (subst: Substitution, keys: string[]): Substitution =>
 
 const applySubst = (subst: Substitution, ty: Type): Type => {
   if (isVarT(ty)) {
-    return subst[ty.id] || ty;
+    return subst[ty.uid] || ty;
   } else if (isFuncT(ty)) {
     return funcT(
+      ty.uid,
       ty.params.map(pty => applySubst(subst, pty)),
       applySubst(subst, ty.returns)
     );
@@ -106,6 +113,7 @@ const applySubst = (subst: Substitution, ty: Type): Type => {
     return ty;
   } else if (isObjT(ty)) {
     return objT(
+      ty.uid,
       ty.properties.map(([name, tyProp]) => [name, applySubst(subst, tyProp)])
     );
   }
@@ -136,6 +144,7 @@ const composeSubst = (s1: Substitution, s2: Substitution): Substitution => {
 };
 
 const instantiate = ({ vars, type }: Scheme): Type => {
+  // TODO: this will need to create new uids
   const newVars = vars.map(varT);
   const subst: Substitution = vars.reduce((s, v, i) => {
     s[v] = newVars[i];
@@ -179,9 +188,9 @@ const unify = (ty1: Type, ty2: Type): Substitution => {
     const s2 = unify(applySubst(s1, ty1.returns), applySubst(s1, ty2.returns));
     return composeSubst(s1, s2);
   } else if (isVarT(ty1)) {
-    return varBind(ty1.id, ty2);
+    return varBind(ty1.uid, ty2);
   } else if (isVarT(ty2)) {
-    return varBind(ty2.id, ty1);
+    return varBind(ty2.uid, ty1);
   }
   throw `types do not unify: ${ty1.name} and ${ty2.name}`;
 };
@@ -199,14 +208,25 @@ const pathData = (subst: Substitution, type: Type) => {
   };
 };
 
-const emptyState = () => ({
-  context: createCtx(),
-  getVarTId: (() => {
+const emptyState = () => {
+  const nextId = (() => {
     let id = 0;
-    return () => `$${++id}`;
-  })(),
-  skip: p => false
-});
+    return () => `${++id}`;
+  })();
+  return {
+    context: createCtx(),
+    types: {
+      boolT: (...args) => boolT(nextId(), ...args),
+      intT: (...args) => intT(nextId(), ...args),
+      funcT: (...args) => funcT(nextId(), ...args),
+      objT: (...args) => objT(nextId(), ...args),
+      strT: (...args) => strT(nextId(), ...args),
+      varT: (...args) => varT(nextId(), ...args),
+      voidT: (...args) => voidT(nextId(), ...args)
+    },
+    skip: p => false
+  };
+};
 
 export const collector = ast => {
   let nodes = {};
@@ -218,7 +238,7 @@ export const collector = ast => {
       }
     },
     BooleanLiteral(path, state = emptyState()) {
-      path.data = pathData(emptySubst(), boolT());
+      path.data = pathData(emptySubst(), state.types.boolT());
       nodes[getId(path.node)] = {
         node: path.node,
         ...path.data
@@ -226,7 +246,7 @@ export const collector = ast => {
     },
     CallExpression(path, state = emptyState()) {
       // console.log("CallExpression");
-      const tyRes = varT(state.getVarTId());
+      const tyRes = state.types.varT();
 
       path.traverse(visitor, {
         ...state,
@@ -247,7 +267,7 @@ export const collector = ast => {
 
       const s3 = unify(
         applySubst(s2, tyFun),
-        funcT(tyArgs.map(a => a.type), tyRes)
+        state.types.funcT(tyArgs.map(a => a.type), tyRes)
       );
 
       const subst = composeSubst(s3, composeSubst(s2, s1));
@@ -273,7 +293,7 @@ export const collector = ast => {
       // console.log("Function");
       const paramTypes = path.node.params.map(p => ({
         name: p.name,
-        type: varT(state.getVarTId())
+        type: state.types.varT()
       }));
       let tempContext = state.context;
       paramTypes.forEach(({ name, type }) => {
@@ -297,10 +317,7 @@ export const collector = ast => {
           const { subst: paramSubst, type: paramType } = path.get(
             `params.${i}`
           ).data;
-          // console.log("current subst", subst);
-          // console.log("param subst", paramSubst);
           let composedSubst = composeSubst(subst, paramSubst);
-          // console.log("composedSubst", composedSubst);
           return {
             subst: composedSubst,
             tyParams: [...tyParams, applySubst(composedSubst, tyParam)]
@@ -309,7 +326,7 @@ export const collector = ast => {
         { subst: s1, tyParams: [] }
       );
 
-      path.data = pathData(subst, funcT(tyParams, bodyType));
+      path.data = pathData(subst, state.types.funcT(tyParams, bodyType));
       nodes[getId(path.node)] = {
         node: path.node,
         ...path.data
@@ -328,7 +345,7 @@ export const collector = ast => {
     },
     NumericLiteral(path, state = emptyState()) {
       // console.log("NumericLiteral");
-      path.data = pathData(emptySubst(), intT());
+      path.data = pathData(emptySubst(), state.types.intT());
       nodes[getId(path.node)] = {
         node: path.node,
         ...path.data
@@ -338,7 +355,7 @@ export const collector = ast => {
       // console.log("Program|BlockStatement");
       const bodyContext = Object.keys(path.scope.bindings).reduce(
         (ctx, binding) => {
-          ctx[binding] = createScheme([], varT(state.getVarTId()));
+          ctx[binding] = createScheme([], state.types.varT());
           return ctx;
         },
         state.context
@@ -354,7 +371,7 @@ export const collector = ast => {
         return composeSubst(subst, s1);
       }, emptySubst());
 
-      path.data = pathData(composedSubst, voidT());
+      path.data = pathData(composedSubst, state.types.voidT());
       path.skip();
     },
     ObjectExpression(path, state = emptyState()) {
@@ -373,10 +390,10 @@ export const collector = ast => {
           // merge each obj prop type into this obj type
           return {
             subst: composedSubst,
-            type: objT([...type.properties, [key, tyValue]])
+            type: state.types.objT([...type.properties, [key, tyValue]])
           };
         },
-        { subst: emptySubst(), type: objT([]) }
+        { subst: emptySubst(), type: state.types.objT([]) }
       );
 
       path.data = pathData(obj.subst, obj.type);
@@ -395,7 +412,7 @@ export const collector = ast => {
         context: applySubstContext(
           valSubst,
           Object.assign(state.context, {
-            [path.node.key.name]: createScheme([], varT(state.getVarTId()))
+            [path.node.key.name]: createScheme([], state.types.varT())
           })
         ),
         skip: p => p.node === path.node.value
@@ -406,13 +423,13 @@ export const collector = ast => {
 
       path.data = pathData(
         subst,
-        objT([[path.node.key.name, applySubst(subst, tyKey)]])
+        state.types.objT([[path.node.key.name, applySubst(subst, tyKey)]])
       );
       nodes[getId(path.node.key)].type = applySubst(subst, tyKey);
       path.skip();
     },
     StringLiteral(path, state = emptyState()) {
-      path.data = pathData(emptySubst(), strT());
+      path.data = pathData(emptySubst(), state.types.strT());
       nodes[getId(path.node)] = {
         node: path.node,
         ...path.data
@@ -431,7 +448,7 @@ export const collector = ast => {
         return composeSubst(subst, s1);
       }, emptySubst());
 
-      path.data = pathData(composedSubst, voidT());
+      path.data = pathData(composedSubst, state.types.voidT());
       path.skip();
     },
     VariableDeclarator(path, state = emptyState()) {
@@ -451,7 +468,7 @@ export const collector = ast => {
       const { subst: s2, type: tyLhs } = path.get("id").data;
 
       const subst = unify(applySubst(s2, tyLhs), tyRhs);
-      path.data = pathData(subst, voidT());
+      path.data = pathData(subst, state.types.voidT());
       // update the type of the id node
       nodes[getId(path.node.id)].type = applySubst(
         subst,
