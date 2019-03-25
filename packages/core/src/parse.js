@@ -215,53 +215,29 @@ export type Visitor = {
 };
 
 export const visitor: Visitor = {
-  enter(path, state = emptyState()) {
-    if (state.skip(path)) {
-      path.skip();
-      return;
-    }
+  BooleanLiteral(path, context, { types }) {
+    return pathData(emptySubst(), types.boolT());
   },
-  BooleanLiteral(path, state = emptyState()) {
-    path.data = pathData(emptySubst(), state.types.boolT());
-    nodes[getId(path.node)] = {
-      node: path.node,
-      ...path.data
-    };
-  },
-  CallExpression(path, state = emptyState()) {
+  CallExpression(path, context, { visit, types }) {
     // console.log("CallExpression");
-    const tyRes = state.types.varT();
+    const tyRes = types.varT();
 
-    path.traverse(visitor, {
-      ...state,
-      skip: p => path.node.arguments.includes(p.node)
-    });
-    const { subst: s1, type: tyFun } = path.get("callee").data;
+    const { subst: calleeSubst, type: tyCallee } = visit(
+      path.node.callee,
+      context
+    );
 
-    path.traverse(visitor, {
-      ...state,
-      context: applySubstContext(s1, state.context),
-      skip: p => p.node === path.node.callee
-    });
+    const args = path.node.arguments.map(n => visit(n, context));
 
-    const tyArgs = path.get("arguments").map(arg => arg.data);
-    const s2 = tyArgs.reduce((s, { subst }) => {
+    const tyArgs = args.map(a => a.type);
+    const s2 = args.reduce((s, { subst }) => {
       return composeSubst(s, subst);
     }, emptySubst());
 
-    const s3 = unify(
-      applySubst(s2, tyFun),
-      state.types.funcT(tyArgs.map(a => a.type), tyRes)
-    );
+    const s3 = unify(applySubst(s2, tyCallee), types.funcT(tyArgs, tyRes));
 
-    const subst = composeSubst(s3, composeSubst(s2, s1));
-
-    path.data = pathData(subst, applySubst(subst, tyRes));
-    nodes[getId(path.node)] = {
-      node: path.node,
-      ...path.data
-    };
-    path.skip();
+    const subst = composeSubst(s3, composeSubst(s2, calleeSubst));
+    return pathData(subst, applySubst(subst, tyRes));
   },
   Function(path, context, { visit, types }) {
     // console.log("Function");
@@ -304,13 +280,9 @@ export const visitor: Visitor = {
     if (!scheme) throw `${path.node.name} not found in scheme`;
     return pathData(emptySubst(), instantiate(scheme));
   },
-  NumericLiteral(path, state = emptyState()) {
+  NumericLiteral(path, context, { types }) {
     // console.log("NumericLiteral");
-    path.data = pathData(emptySubst(), state.types.intT());
-    nodes[getId(path.node)] = {
-      node: path.node,
-      ...path.data
-    };
+    return pathData(emptySubst(), types.intT());
   },
   "Program|BlockStatement"(path, context, { visit, types }) {
     // console.log("Program|BlockStatement");

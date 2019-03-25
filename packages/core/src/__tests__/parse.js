@@ -36,11 +36,10 @@ it("should infer identity function type", () => {
 it("should infer arg function type", () => {
   const code = `x => x(true)`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const res = Object.keys(graph).reduce(
-    (curr, k) =>
+  const res = traversal(visitor, ast, nextId())(
+    (curr, { path, type }) =>
       Object.assign(curr, {
-        [graph[k].node.type]: prettyPrint(graph[k].type)
+        [path.node.type]: prettyPrint(type)
       }),
     {}
   );
@@ -50,14 +49,13 @@ it("should infer arg function type", () => {
   );
 });
 
-it("should infer identity call type", () => {
+it.only("should infer identity call type", () => {
   const code = `(x => x)(1)`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const res = Object.keys(graph).reduce(
-    (curr, k) =>
+  const res = traversal(visitor, ast, nextId())(
+    (curr, { path, type }) =>
       Object.assign(curr, {
-        [graph[k].node.type]: prettyPrint(graph[k].type)
+        [path.node.type]: prettyPrint(type)
       }),
     {}
   );
