@@ -353,59 +353,40 @@ export const visitor: Visitor = {
 
     return pathData(composedSubst, types.voidT());
   },
-  ObjectExpression(path, state = emptyState()) {
+  ObjectExpression(path, context, { visit, types }) {
     const obj = path.node.properties.reduce(
       ({ subst, type }, prop, i) => {
-        path.traverse(visitor, {
-          ...state,
-          context: applySubstContext(subst, state.context),
-          skip: p => p.node !== prop
-        });
-        const { subst: objSubst, type: tyObj } = path.get(
-          `properties.${i}`
-        ).data;
+        const updatedContext = applySubstContext(subst, context);
+        const { subst: objSubst, type: tyObj } = visit(prop, updatedContext);
         const [[key, tyValue]] = tyObj.properties;
         let composedSubst = composeSubst(subst, objSubst);
         // merge each obj prop type into this obj type
         return {
           subst: composedSubst,
-          type: state.types.objT([...type.properties, [key, tyValue]])
+          type: types.objT([...type.properties, [key, tyValue]])
         };
       },
-      { subst: emptySubst(), type: state.types.objT([]) }
+      { subst: emptySubst(), type: types.objT([]) }
     );
 
-    path.data = pathData(obj.subst, obj.type);
-    path.skip();
+    return pathData(obj.subst, obj.type);
   },
-  ObjectProperty(path, state = emptyState()) {
+  ObjectProperty(path, context, { visit, types }) {
     // infer value
-    path.traverse(visitor, {
-      ...state,
-      skip: p => p.node === path.node.key
-    });
-    const { subst: valSubst, type: tyVal } = path.get("value").data;
+    const { subst: valSubst, type: tyVal } = visit(path.node.value, context);
     // infer key
-    path.traverse(visitor, {
-      ...state,
-      context: applySubstContext(
-        valSubst,
-        Object.assign(state.context, {
-          [path.node.key.name]: createScheme([], state.types.varT())
-        })
-      ),
-      skip: p => p.node === path.node.value
+    const updatedCtx = applySubstContext(valSubst, {
+      ...context,
+      [path.node.key.name]: createScheme([], types.varT())
     });
-    const { subst: keySubst, type: tyKey } = path.get("key").data;
+    const { subst: keySubst, type: tyKey } = visit(path.node.key, updatedCtx);
 
     const subst = unify(applySubst(keySubst, tyKey), tyVal);
 
-    path.data = pathData(
+    return pathData(
       subst,
-      state.types.objT([[path.node.key.name, applySubst(subst, tyKey)]])
+      types.objT([[path.node.key.name, applySubst(subst, tyKey)]])
     );
-    nodes[getId(path.node.key)].type = applySubst(subst, tyKey);
-    path.skip();
   },
   StringLiteral(path, context, { types }) {
     return pathData(emptySubst(), types.strT());
