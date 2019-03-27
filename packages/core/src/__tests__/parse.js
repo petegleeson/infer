@@ -128,6 +128,8 @@ it("should model single-arity memoize function", () => {
   `;
   const ast = parser.parse(code);
   const ids = traversal(visitor, ast, nextId())(collectIds, {});
+  const fn = funcT([varT()], varT());
+  expect(ids.memoize).toEqual(prettyPrint(funcT([fn], fn)));
   expect(ids.getOne).toEqual(prettyPrint(funcT([varT()], intT())));
   expect(ids.n).toEqual(prettyPrint(intT()));
 });

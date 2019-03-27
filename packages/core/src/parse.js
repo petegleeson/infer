@@ -307,7 +307,7 @@ export const visitor: Visitor = {
     );
 
     return pathData(
-      composedSubst,
+      composeSubst(paramSubst, bodySubst),
       applySubst(composedSubst, types.funcT(paramTypes, bodyType))
     );
   },
