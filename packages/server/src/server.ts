@@ -16,7 +16,7 @@ import {
   CompletionItemKind,
   TextDocumentPositionParams
 } from "vscode-languageserver";
-import { collector, parse, prettyPrint } from "core";
+import { traversal, parse, prettyPrint, visitor } from "core";
 
 // Create a connection for the server. The connection uses Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -136,7 +136,17 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   // The validator creates diagnostics for all uppercase words length 2 and more
   let text = textDocument.getText();
   let ast = parse(text);
-  let graph = collector(ast);
+  const nextId = () => {
+    let id = 0;
+    return () => `${++id}`;
+  };
+  let graph = traversal(visitor, ast, nextId())(
+    (nodes, { uid, path, ...rest }) => {
+      nodes[uid] = { ...rest, uid, node: path.node };
+      return nodes;
+    },
+    {}
+  );
   graphs[textDocument.uri] = graph;
 
   connection.console.log("inferred types for " + textDocument.uri);
