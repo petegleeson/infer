@@ -115,7 +115,35 @@ const composeSubst = (s1: Substitution, s2: Substitution): Substitution => {
   };
 };
 
-const instantiate = ({ vars, type }: Scheme): Type => {
+const freeTypeVars = (ty: Type): string[] => {
+  if (isVarT(ty)) {
+    return [ty.uid];
+  } else if (isFuncT(ty)) {
+    return ty.params
+      .reduce((c, p) => c.concat(freeTypeVars(p)), [])
+      .concat(freeTypeVars(ty.returns));
+  }
+  return [];
+};
+
+const freeTypeVarsScheme = (scheme: Scheme): string[] => {
+  return freeTypeVars(scheme.type).filter(v => !scheme.vars.includes(v));
+};
+
+const freeTypeVarsContext = (context: Context): string[] => {
+  return Object.values(context).reduce(
+    (curr, s) => curr.concat(freeTypeVarsScheme(s)),
+    []
+  );
+};
+
+const generalise = (context: Context, ty: Type) =>
+  createScheme(
+    freeTypeVars(ty).filter(v => !freeTypeVarsContext(context).includes(v)),
+    ty
+  );
+
+const instantiate = ({ vars, type }: Scheme, varT): Type => {
   // TODO: this will need to create new uids
   const newVars = vars.map(varT);
   const subst: Substitution = vars.reduce((s, v, i) => {
@@ -127,14 +155,14 @@ const instantiate = ({ vars, type }: Scheme): Type => {
 
 const varBind = (id: string, ty: Type): Substitution => {
   // a U a
-  if (id === ty.name) {
+  if (id === ty.uid) {
     return emptySubst();
   } else if (
     isFuncT(ty) &&
     (ty.params.find(p => isVarT(p) && p.name === id) ||
       (isVarT(ty.returns) && ty.returns.name === id))
   ) {
-    throw `${id} occurs in more complex type ${ty.name}`;
+    throw `${id} occurs in more complex type ${ty.uid}`;
   }
   return {
     [id]: ty
@@ -226,6 +254,10 @@ export const visitor: Visitor = {
       path.node.callee,
       context
     );
+    const generalisedtyCallee = instantiate(
+      generalise(context, tyCallee),
+      types.varT
+    );
 
     const args = path.node.arguments.map(n => visit(n, context));
 
@@ -234,7 +266,10 @@ export const visitor: Visitor = {
       return composeSubst(s, subst);
     }, emptySubst());
 
-    const s3 = unify(applySubst(s2, tyCallee), types.funcT(tyArgs, tyRes));
+    const s3 = unify(
+      applySubst(s2, generalisedtyCallee),
+      types.funcT(tyArgs, tyRes)
+    );
 
     const subst = composeSubst(s3, composeSubst(s2, calleeSubst));
     return pathData(subst, applySubst(subst, tyRes));
@@ -243,8 +278,10 @@ export const visitor: Visitor = {
     // console.log("Function");
     // add params to context
     const funcContext = path.node.params.reduce(
-      (ctx, n) =>
-        Object.assign(ctx, { [n.name]: createScheme([], types.varT()) }),
+      (ctx, n) => ({
+        ...ctx,
+        [n.name]: createScheme([], types.varT())
+      }),
       context
     );
     // infer params type
@@ -274,11 +311,11 @@ export const visitor: Visitor = {
       applySubst(composedSubst, types.funcT(paramTypes, bodyType))
     );
   },
-  Identifier(path, context) {
+  Identifier(path, context, { types }) {
     // console.log("Identifier", path.node.name);
     const scheme = context[path.node.name];
     if (!scheme) throw `${path.node.name} not found in scheme`;
-    return pathData(emptySubst(), instantiate(scheme));
+    return pathData(emptySubst(), instantiate(scheme, types.varT));
   },
   NumericLiteral(path, context, { types }) {
     // console.log("NumericLiteral");
@@ -300,10 +337,10 @@ export const visitor: Visitor = {
     // flatMap ids
     const ids = path.node.body.reduce((curr, n) => curr.concat(getIds(n)), []);
     const blockContext = ids.reduce(
-      (ctx, id) =>
-        Object.assign(ctx, {
-          [id]: createScheme([], types.varT())
-        }),
+      (ctx, id) => ({
+        ...ctx,
+        [id]: createScheme([], types.varT())
+      }),
       context
     );
     const composedSubst = path.node.body.reduce((subst, node, i) => {

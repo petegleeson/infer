@@ -49,7 +49,7 @@ it("should infer arg function type", () => {
   );
 });
 
-it.only("should infer identity call type", () => {
+it("should infer identity call type", () => {
   const code = `(x => x)(1)`;
   const ast = parser.parse(code);
   const res = traversal(visitor, ast, nextId())(
@@ -67,11 +67,10 @@ it.only("should infer identity call type", () => {
 it("should infer multi arg function type", () => {
   const code = `(x, y) => y`;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const res = Object.keys(graph).reduce(
-    (curr, k) =>
+  const res = traversal(visitor, ast, nextId())(
+    (curr, { path, type }) =>
       Object.assign(curr, {
-        [graph[k].node.type]: prettyPrint(graph[k].type)
+        [path.node.type]: prettyPrint(type)
       }),
     {}
   );
@@ -94,8 +93,7 @@ it("should infer assignment then call expression", () => {
     const i = f(1);
   `;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const ids = collectIds(graph);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
   expect(ids.i).toEqual(prettyPrint(intT()));
 });
 
@@ -104,8 +102,7 @@ it("should infer string type", () => {
     const greeting = "hi";
   `;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const ids = collectIds(graph);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
   expect(ids.greeting).toEqual(prettyPrint(strT()));
 });
 
@@ -117,8 +114,7 @@ it("should infer object type", () => {
     }
   `;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const ids = collectIds(graph);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
   expect(ids.person).toEqual(
     prettyPrint(objT([["name", strT()], ["age", intT()]]))
   );
@@ -131,8 +127,7 @@ it("should model single-arity memoize function", () => {
     const n = getOne(0);
   `;
   const ast = parser.parse(code);
-  const graph = collector(ast);
-  const ids = collectIds(graph);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
   expect(ids.getOne).toEqual(prettyPrint(funcT([varT()], intT())));
   expect(ids.n).toEqual(prettyPrint(intT()));
 });
