@@ -407,12 +407,8 @@ export const visitor: Visitor = {
     nodes[getId(path.node.key)].type = applySubst(subst, tyKey);
     path.skip();
   },
-  StringLiteral(path, state = emptyState()) {
-    path.data = pathData(emptySubst(), state.types.strT());
-    nodes[getId(path.node)] = {
-      node: path.node,
-      ...path.data
-    };
+  StringLiteral(path, context, { types }) {
+    return pathData(emptySubst(), types.strT());
   },
   VariableDeclarator(path, context, { visit, types }) {
     // console.log("VariableDeclarator");
