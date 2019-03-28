@@ -141,13 +141,29 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     return () => `${++id}`;
   };
   let graph = traversal(visitor, ast, nextId())(
-    (nodes, { uid, path, ...rest }) => {
-      nodes[uid] = { ...rest, uid, node: path.node };
-      return nodes;
+    ({ nodes, diagnostics }, { uid, path, type }) => {
+      if (type.name === "err") {
+        let diagnostic: Diagnostic = {
+          severity: DiagnosticSeverity.Error,
+          range: {
+            start: babelToVsCode(path.node.loc.start),
+            end: babelToVsCode(path.node.loc.end)
+          },
+          message: `cannot flow ${type.lower.name} into ${type.upper.name}`,
+          source: "Infer"
+        };
+        diagnostics.push(diagnostic);
+      }
+      nodes[uid] = { type, uid, node: path.node };
+      return { nodes, diagnostics };
     },
-    {}
+    { nodes: {}, diagnostics: [] }
   );
-  graphs[textDocument.uri] = graph;
+  graphs[textDocument.uri] = graph.nodes;
+  connection.sendDiagnostics({
+    uri: textDocument.uri,
+    diagnostics: graph.diagnostics
+  });
 
   connection.console.log("inferred types for " + textDocument.uri);
 }
@@ -157,21 +173,28 @@ connection.onDidChangeWatchedFiles(_change => {
   connection.console.log("We received an file change event");
 });
 
-const cursorInside = (line, character, { loc }) => {
-  return (
-    (line === loc.start.line && character === loc.start.column) ||
-    (line === loc.end.line && character === loc.end.column)
-  );
-};
+const vsCodeToBabel = range => ({
+  line: range.line + 1,
+  column: range.character
+});
+
+const babelToVsCode = pos => ({
+  line: pos.line - 1,
+  character: pos.column
+});
 
 connection.onRequest("custom/selectionChanged", ({ uri, line, character }) => {
   const nodes = graphs[uri];
   if (nodes) {
     const type = Object.keys(nodes)
-      .filter(id => {
-        return cursorInside(line + 1, character, nodes[id].node);
+      .map(k => nodes[k])
+      .filter(({ node }) => {
+        return (
+          line + 1 === node.loc.start.line &&
+          character === node.loc.start.column
+        );
       })
-      .map(id => nodes[id].type);
+      .map(({ type }) => type);
     if (type.length > 0) {
       connection.sendRequest("custom/typeChanged", prettyPrint(type[0]));
     }
