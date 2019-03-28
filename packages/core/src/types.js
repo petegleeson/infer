@@ -4,6 +4,15 @@ type BoolType = { uid: string, name: "bool" };
 export const boolT = (uid: string): BoolType => ({ name: "bool", uid });
 export const isBoolT = (ty: Type) => ty.name === "bool";
 
+type ErrType = { uid: string, name: "err", lower: Type, upper: Type };
+export const errT = (uid: string, lower: Type, upper: Type): ErrType => ({
+  name: "err",
+  uid,
+  lower,
+  upper
+});
+export const isErrT = (ty: Type) => ty.name === "err";
+
 type FuncType = { uid: string, name: "func", params: Type[], returns: Type };
 export const funcT = (
   uid: string,
@@ -42,18 +51,20 @@ export const voidT = (uid: string): VoidType => ({ name: "void", uid });
 export const isVoidT = (ty: Type) => ty.name === "void";
 
 export type Type =
-  | IntType
   | BoolType
+  | ErrType
   | FuncType
+  | IntType
   | ObjType
+  | StrType
   | VarType
-  | VoidType
-  | StrType;
+  | VoidType;
 
 export const getTypes = (nextId: () => string) => ({
   boolT: (...args) => boolT(nextId(), ...args),
-  intT: (...args) => intT(nextId(), ...args),
+  errT: (...args) => errT(nextId(), ...args),
   funcT: (...args) => funcT(nextId(), ...args),
+  intT: (...args) => intT(nextId(), ...args),
   objT: (...args) => objT(nextId(), ...args),
   strT: (...args) => strT(nextId(), ...args),
   varT: (...args) => varT(nextId(), ...args),

@@ -3,6 +3,7 @@ import traverse from "@babel/traverse";
 import * as t from "@babel/types";
 import {
   isBoolT,
+  isErrT,
   isIntT,
   isStrT,
   isVarT,
@@ -43,6 +44,8 @@ export const prettyPrint = (type: Type): string => {
         .join(", ")} }`;
     } else if (isVoidT(ty)) {
       return "";
+    } else if (isErrT(ty)) {
+      return "err";
     }
     throw `don't know how to print ${ty.name}`;
   };
@@ -69,7 +72,9 @@ const deleteSubst = (subst: Substitution, keys: string[]): Substitution =>
     }, {});
 
 export const applySubst = (subst: Substitution, ty: Type): Type => {
-  if (isVarT(ty)) {
+  if (subst[ty.uid] && isErrT(subst[ty.uid])) {
+    return subst[ty.uid];
+  } else if (isVarT(ty)) {
     return subst[ty.uid] || ty;
   } else if (isFuncT(ty)) {
     return funcT(
@@ -88,6 +93,8 @@ export const applySubst = (subst: Substitution, ty: Type): Type => {
       ty.uid,
       ty.properties.map(([name, tyProp]) => [name, applySubst(subst, tyProp)])
     );
+  } else if (isErrT(ty)) {
+    return ty;
   }
   throw `cannot apply substution to ${ty.name}`;
 };
@@ -144,7 +151,6 @@ const generalise = (context: Context, ty: Type) =>
   );
 
 const instantiate = ({ vars, type }: Scheme, varT): Type => {
-  // TODO: this will need to create new uids
   const newVars = vars.map(varT);
   const subst: Substitution = vars.reduce((s, v, i) => {
     s[v] = newVars[i];
@@ -169,7 +175,7 @@ const varBind = (id: string, ty: Type): Substitution => {
   };
 };
 
-const unify = (ty1: Type, ty2: Type): Substitution => {
+const unify = (ty1: Type, ty2: Type, errT): Substitution => {
   if (isIntT(ty1) && isIntT(ty2)) {
     return emptySubst();
   } else if (isBoolT(ty1) && isBoolT(ty2)) {
@@ -182,15 +188,23 @@ const unify = (ty1: Type, ty2: Type): Substitution => {
     ty1.params.length === ty2.params.length
   ) {
     const s1 = ty1.params.reduce(
-      (subst, p1, i) => composeSubst(subst, unify(p1, ty2.params[i])),
+      (subst, p1, i) => composeSubst(subst, unify(p1, ty2.params[i], errT)),
       emptySubst()
     );
-    const s2 = unify(applySubst(s1, ty1.returns), applySubst(s1, ty2.returns));
+    const s2 = unify(
+      applySubst(s1, ty1.returns),
+      applySubst(s1, ty2.returns),
+      errT
+    );
     return composeSubst(s1, s2);
   } else if (isVarT(ty1)) {
     return varBind(ty1.uid, ty2);
   } else if (isVarT(ty2)) {
     return varBind(ty2.uid, ty1);
+  } else {
+    return {
+      [ty1.uid]: errT(ty1, ty2)
+    };
   }
   throw `types do not unify: ${ty1.name} and ${ty2.name}`;
 };
@@ -268,7 +282,8 @@ export const visitor: Visitor = {
 
     const s3 = unify(
       applySubst(s2, generalisedtyCallee),
-      types.funcT(tyArgs, tyRes)
+      types.funcT(tyArgs, tyRes),
+      types.errT
     );
 
     const subst = composeSubst(s3, composeSubst(s2, calleeSubst));
@@ -303,7 +318,8 @@ export const visitor: Visitor = {
     // unify param and body substitutions
     const composedSubst = unify(
       applySubst(paramSubst, types.funcT(paramTypes, bodyType)),
-      applySubst(bodySubst, types.funcT(paramTypes, bodyType))
+      applySubst(bodySubst, types.funcT(paramTypes, bodyType)),
+      types.errT
     );
 
     return pathData(
@@ -381,7 +397,7 @@ export const visitor: Visitor = {
     });
     const { subst: keySubst, type: tyKey } = visit(path.node.key, updatedCtx);
 
-    const subst = unify(applySubst(keySubst, tyKey), tyVal);
+    const subst = unify(applySubst(keySubst, tyKey), tyVal, types.errT);
 
     return pathData(
       subst,
@@ -401,7 +417,7 @@ export const visitor: Visitor = {
       applySubstContext(rhsSubst, context)
     );
 
-    const subst = unify(applySubst(lhsSubst, tyLhs), tyRhs);
+    const subst = unify(applySubst(lhsSubst, tyLhs), tyRhs, types.errT);
     return pathData(subst, types.voidT());
   }
 };

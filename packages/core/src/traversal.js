@@ -59,6 +59,7 @@ const traverse = (visitors: Visitor, node: Node, nextId) => {
       Object.keys(result.subst).forEach(uid => {
         const updateNode = nodeCache.get(uid);
         if (updateNode) {
+          // console.log(applySubst(result.subst, updateNode.type));
           nodeCache.set(uid, {
             ...updateNode,
             type: applySubst(result.subst, updateNode.type)

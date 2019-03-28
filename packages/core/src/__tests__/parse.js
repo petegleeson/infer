@@ -17,7 +17,9 @@ const nextId = () => {
   return () => `${++id}`;
 };
 
-const { boolT, funcT, intT, varT, strT, objT, voidT } = getTypes(nextId());
+const { boolT, errT, funcT, intT, varT, strT, objT, voidT } = getTypes(
+  nextId()
+);
 
 it("should infer identity function type", () => {
   const code = `x => x`;
@@ -132,4 +134,19 @@ it("should model single-arity memoize function", () => {
   expect(ids.memoize).toEqual(prettyPrint(funcT([fn], fn)));
   expect(ids.getOne).toEqual(prettyPrint(funcT([varT()], intT())));
   expect(ids.n).toEqual(prettyPrint(intT()));
+});
+
+it("should infer error type", () => {
+  const code = `1()`;
+  const ast = parser.parse(code);
+  const res = traversal(visitor, ast, nextId())(
+    (curr, { uid, path, type }) =>
+      Object.assign(curr, {
+        [path.node.type]: prettyPrint(type)
+      }),
+    {}
+  );
+  expect(res.NumericLiteral).toEqual(
+    prettyPrint(errT(intT(), funcT([], varT())))
+  );
 });
