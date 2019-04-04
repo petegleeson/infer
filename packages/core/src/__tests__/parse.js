@@ -1,7 +1,7 @@
 // @flow
 import * as parser from "@babel/parser";
 import containDeep from "jest-expect-contain-deep";
-import { visitor, prettyPrint } from "../parse";
+import { visitor, prettyPrint } from "../visitor";
 import traversal from "../traversal";
 import { getTypes } from "../types";
 
@@ -149,4 +149,27 @@ it("should infer error type", () => {
   expect(res.NumericLiteral).toEqual(
     prettyPrint(errT(intT(), funcT([], varT())))
   );
+});
+
+it("should infer error type", () => {
+  const idOrType = path =>
+    path.node.type === "Identifier" ? path.node.name : path.node.type;
+  const code = `
+    const f = a => a(true);
+    f(1);
+  `;
+  const ast = parser.parse(code);
+  const res = traversal(visitor, ast, nextId())(
+    (curr, { uid, path, type }) => [
+      ...curr,
+      {
+        [idOrType(path)]: prettyPrint(type)
+      }
+    ],
+    []
+  );
+  console.log(res);
+  expect(res).toContain({
+    NumericLiteral: prettyPrint(errT(intT(), funcT([boolT()], varT())))
+  });
 });
