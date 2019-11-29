@@ -201,3 +201,30 @@ it("should infer error type function is not a boolean", () => {
     NumericLiteral: prettyPrint(errT(intT(), funcT([boolT()], varT())))
   });
 });
+
+it("should infer object access", () => {
+  const idOrType = path =>
+    path.node.type === "Identifier" ? path.node.name : path.node.type;
+  const code = `
+    const o = {
+      a: 1
+    };
+    const one = o.a;
+  `;
+  const ast = parser.parse(code);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
+  expect(ids.one).toEqual(prettyPrint(intT()));
+});
+
+it("should infer object param", () => {
+  const idOrType = path =>
+    path.node.type === "Identifier" ? path.node.name : path.node.type;
+  const code = `
+    const f = (a) => a.b;
+    const j = f({b: 1});
+  `;
+  const ast = parser.parse(code);
+  const ids = traversal(visitor, ast, nextId())(collectIds, {});
+  expect(ids.a).toEqual(prettyPrint(objT([["b", varT()]])));
+  expect(ids.b).toEqual(prettyPrint(intT()));
+});

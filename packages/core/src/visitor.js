@@ -197,6 +197,19 @@ const unify = (ty1: Type, ty2: Type, errT): Substitution => {
       errT
     );
     return composeSubst(s1, s2);
+  } else if (
+    isObjT(ty1) &&
+    isObjT(ty2) &&
+    ty1.properties.length <= ty2.properties.length
+  ) {
+    return ty1.properties.reduce((subst, [key, value]) => {
+      const prop = ty2.properties.find(([k]) => k === key);
+      return prop
+        ? composeSubst(subst, unify(value, prop[1], errT))
+        : {
+            [ty1.uid]: errT(ty1, ty2)
+          };
+    }, emptySubst());
   } else if (isVarT(ty1)) {
     return varBind(ty1.uid, ty2);
   } else if (isVarT(ty2)) {
@@ -330,6 +343,32 @@ export const visitor: Visitor = {
     const scheme = context[path.node.name];
     if (!scheme) throw `${path.node.name} not found in scheme`;
     return pathData(emptySubst(), instantiate(scheme, types.varT));
+  },
+  MemberExpression(path, context, { types, visit }) {
+    // console.log("MemberExpression");
+    const tyProperty = types.varT();
+
+    // visit object
+    const { subst: objectSubst, type: tyObject } = visit(
+      path.node.object,
+      context
+    );
+    const s1 = unify(
+      types.objT([[path.node.property.name, tyProperty]]),
+      tyObject,
+      types.errT
+    );
+
+    // visit property
+    const { subst: propSubst, type: tyProp } = visit(path.node.property, {
+      ...context,
+      [path.node.property.name]: createScheme([], types.varT())
+    });
+
+    const s2 = unify(tyProp, applySubst(s1, tyProperty), types.errT);
+
+    const subst = composeSubst(s1, s2);
+    return pathData(subst, applySubst(subst, tyProperty));
   },
   NumericLiteral(path, context, { types }) {
     // console.log("NumericLiteral");
