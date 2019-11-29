@@ -12,7 +12,7 @@
     "babel-jest": "^23.4.2",
     "flow-bin": "^0.78.0",
     "flow-typed": "^2.5.1",
-    "jest": "^23.4.2",
+    "jest": "^24.9.0",
     "jest-expect-contain-deep": "^1.0.1"
   },
   "dependencies": {
