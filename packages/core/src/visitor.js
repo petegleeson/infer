@@ -45,7 +45,7 @@ export const prettyPrint = (type: Type): string => {
     } else if (isVoidT(ty)) {
       return "";
     } else if (isErrT(ty)) {
-      return "err";
+      return `err: expected ${print(ty.upper)} and got ${print(ty.lower)}`;
     }
     throw `don't know how to print ${ty.name}`;
   };
@@ -210,9 +210,7 @@ const unify = (ty1: Type, ty2: Type, errT): Substitution => {
 };
 
 const getId = node =>
-  `${node.loc.start.line}${node.loc.start.column}${node.loc.end.line}${
-    node.loc.end.column
-  }`;
+  `${node.loc.start.line}${node.loc.start.column}${node.loc.end.line}${node.loc.end.column}`;
 
 const pathData = (subst: Substitution, type: Type) => {
   if (typeof subst !== "object") throw `subst is not an object`;
@@ -281,8 +279,8 @@ export const visitor: Visitor = {
     }, emptySubst());
 
     const s3 = unify(
-      applySubst(s2, generalisedtyCallee),
       types.funcT(tyArgs, tyRes),
+      applySubst(s2, generalisedtyCallee),
       types.errT
     );
 

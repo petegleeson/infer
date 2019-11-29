@@ -7,7 +7,7 @@ import {
   emptySubst,
   type Visitor,
   type Result as VisitorResult
-} from "./parse";
+} from "./visitor";
 
 type Node = { [k: string]: any };
 
